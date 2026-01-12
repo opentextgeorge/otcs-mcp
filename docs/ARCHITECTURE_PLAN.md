@@ -1150,6 +1150,8 @@ Records Management API methods have been integrated directly into `otcs-client.t
 - ✅ RM Cross-References API tested and verified (list_types, apply, get_node_xrefs, remove)
 - ✅ Phase 7: RSI Retention Schedules - Full RSI lifecycle (1 tool, 13 actions)
 - ✅ RSI API tested: list, create, get, update, get_schedules, create_schedule, get_items, delete
+- ✅ RSI API parsing fixed for PascalCase field names (RSIID, RSI, RSIStatus)
+- ✅ RM Test Suite: 40 passed, 0 failed, 5 skipped
 
 ### Up Next
 1. **Phase 8: RM Disposition** - Disposition search and processing (1 tool)

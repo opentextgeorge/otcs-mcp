@@ -368,6 +368,8 @@ export RM_CLASSIFICATION_ID=14978  # Your classification ID
 npm run test:rm
 ```
 
+**RM Test Results:** 40 passed, 0 failed, 5 skipped
+
 **RM Test Coverage:**
 - Classifications: declare, update_details, undeclare
 - Holds: create, apply, get, remove, delete
@@ -398,11 +400,10 @@ otcs-mcp/
 
 ## Roadmap
 
-### Phase 7: Records Management - Advanced (2 tools)
-- `otcs_rm_rsi` - RSI (Record Series Identifier) schedules
+### Phase 8: RM Disposition (1 tool)
 - `otcs_rm_disposition` - Disposition search and processing
 
-### Phase 8: Enhanced Features (4 tools)
+### Phase 9: Enhanced Features (4 tools)
 - `otcs_favorites` - Manage favorites and tabs
 - `otcs_reminders` - Node reminders
 - `otcs_notifications` - Notification interests
