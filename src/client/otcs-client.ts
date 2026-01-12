@@ -57,6 +57,22 @@ import {
   PermissionOperationResponse,
   EffectivePermissions,
   ApplyToScopeValue,
+  // RM types
+  RMClassification,
+  RMClassificationsResponse,
+  RMClassificationApplyParams,
+  RMRecordUpdateParams,
+  RMHold,
+  RMHoldsResponse,
+  RMNodeHoldsResponse,
+  RMHoldItemsResponse,
+  RMHoldUsersResponse,
+  RMHoldParams,
+  RMCrossRefType,
+  RMCrossRef,
+  RMNodeCrossRefsResponse,
+  RMCrossRefTypesResponse,
+  RMCrossRefApplyParams,
 } from '../types.js';
 
 export class OTCSClient {
@@ -2415,5 +2431,525 @@ export class OTCSClient {
     }
 
     return permissions;
+  }
+
+  // ============ Records Management: Classifications ============
+
+  /**
+   * Get RM classifications on a node
+   */
+  async getRMClassifications(nodeId: number): Promise<RMClassificationsResponse> {
+    const response = await this.request<any>('GET', `/v1/nodes/${nodeId}/rmclassifications`);
+
+    const classifications: RMClassification[] = [];
+    const data = response.data || response.results || response;
+
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        classifications.push(this.parseRMClassification(item));
+      }
+    } else if (data && typeof data === 'object') {
+      // Single classification or nested structure
+      if (data.rmclassifications) {
+        for (const item of data.rmclassifications) {
+          classifications.push(this.parseRMClassification(item));
+        }
+      } else if (data.id || data.class_id) {
+        classifications.push(this.parseRMClassification(data));
+      }
+    }
+
+    return {
+      node_id: nodeId,
+      classifications,
+    };
+  }
+
+  /**
+   * Apply RM classification to a node (declare as record)
+   */
+  async applyRMClassification(params: RMClassificationApplyParams): Promise<{ success: boolean; classification?: RMClassification }> {
+    const formData = new URLSearchParams();
+    formData.append('class_id', params.class_id.toString());
+    if (params.official !== undefined) formData.append('official', params.official.toString());
+    if (params.vital_record !== undefined) formData.append('vital_record', params.vital_record.toString());
+    if (params.essential !== undefined) formData.append('essential', params.essential.toString());
+
+    const response = await this.request<any>('POST', `/v1/nodes/${params.node_id}/rmclassifications`, undefined, formData);
+
+    return {
+      success: true,
+      classification: response.data ? this.parseRMClassification(response.data) : undefined,
+    };
+  }
+
+  /**
+   * Remove RM classification from a node
+   */
+  async removeRMClassification(nodeId: number, classId: number): Promise<{ success: boolean }> {
+    await this.request<any>('DELETE', `/v1/nodes/${nodeId}/rmclassifications/${classId}`);
+    return { success: true };
+  }
+
+  /**
+   * Update record details
+   */
+  async updateRMRecordDetails(params: RMRecordUpdateParams): Promise<{ success: boolean }> {
+    const formData = new URLSearchParams();
+    if (params.official !== undefined) formData.append('official', params.official.toString());
+    if (params.vital_record !== undefined) formData.append('vital_record', params.vital_record.toString());
+    if (params.essential !== undefined) formData.append('essential', params.essential.toString());
+    if (params.accession_code) formData.append('accession_code', params.accession_code);
+    if (params.alt_retention) formData.append('alt_retention', params.alt_retention);
+    if (params.comments) formData.append('comments', params.comments);
+
+    await this.request<any>('PUT', `/v1/nodes/${params.node_id}/rmclassifications`, undefined, formData);
+    return { success: true };
+  }
+
+  /**
+   * Make record confidential
+   */
+  async makeRMConfidential(nodeId: number): Promise<{ success: boolean }> {
+    await this.request<any>('PUT', `/v1/nodes/${nodeId}/rmclassifications/makeConfidential`);
+    return { success: true };
+  }
+
+  /**
+   * Remove confidential marking from record
+   */
+  async removeRMConfidential(nodeId: number): Promise<{ success: boolean }> {
+    await this.request<any>('PUT', `/v1/nodes/${nodeId}/rmclassifications/removeConfidential`);
+    return { success: true };
+  }
+
+  /**
+   * Finalize records
+   */
+  async finalizeRMRecords(nodeIds: number[]): Promise<{ success: boolean; finalized_count: number }> {
+    const formData = new URLSearchParams();
+    formData.append('ids', nodeIds.join(','));
+
+    await this.request<any>('PUT', `/v1/rmclassifications/finalizerecords`, undefined, formData);
+    return { success: true, finalized_count: nodeIds.length };
+  }
+
+  private parseRMClassification(data: any): RMClassification {
+    return {
+      id: data.id || data.class_id || 0,
+      name: data.name || data.classification_name || '',
+      class_id: data.class_id,
+      classification_id: data.classification_id,
+      classification_name: data.classification_name,
+      official: data.official,
+      vital_record: data.vital_record,
+      confidential: data.confidential,
+      finalized: data.finalized,
+      essential: data.essential,
+      rsi_id: data.rsi_id,
+      rsi_name: data.rsi_name,
+      status: data.status,
+      create_date: data.create_date,
+      modify_date: data.modify_date,
+    };
+  }
+
+  // ============ Records Management: Holds ============
+
+  /**
+   * List all holds
+   */
+  async listRMHolds(): Promise<RMHoldsResponse> {
+    const response = await this.request<any>('GET', `/v1/holds`);
+
+    const holds: RMHold[] = [];
+    const data = response.data || response.results || response;
+
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        holds.push(this.parseRMHold(item));
+      }
+    } else if (data && data.holds) {
+      for (const item of data.holds) {
+        holds.push(this.parseRMHold(item));
+      }
+    }
+
+    return {
+      holds,
+      total_count: holds.length,
+    };
+  }
+
+  /**
+   * Get hold details
+   */
+  async getRMHold(holdId: number): Promise<RMHold> {
+    const response = await this.request<any>('GET', `/v2/holds/${holdId}`);
+    const data = response.data || response.results || response;
+    return this.parseRMHold(data);
+  }
+
+  /**
+   * Create a new hold
+   */
+  async createRMHold(params: RMHoldParams): Promise<RMHold> {
+    const formData = new URLSearchParams();
+    formData.append('name', params.name);
+    if (params.comment) formData.append('comment', params.comment);
+    if (params.type) formData.append('type', params.type);
+    if (params.parent_id) formData.append('parent_id', params.parent_id.toString());
+    if (params.alternate_hold_id) formData.append('alternate_hold_id', params.alternate_hold_id);
+
+    const response = await this.request<any>('POST', `/v1/holds`, undefined, formData);
+    const data = response.data || response.results || response;
+    return this.parseRMHold(data);
+  }
+
+  /**
+   * Update a hold
+   */
+  async updateRMHold(holdId: number, params: Partial<RMHoldParams>): Promise<RMHold> {
+    const formData = new URLSearchParams();
+    formData.append('id', holdId.toString());
+    if (params.name) formData.append('name', params.name);
+    if (params.comment) formData.append('comment', params.comment);
+    if (params.alternate_hold_id) formData.append('alternate_hold_id', params.alternate_hold_id);
+
+    const response = await this.request<any>('PUT', `/v1/holds`, undefined, formData);
+    const data = response.data || response.results || response;
+    return this.parseRMHold(data);
+  }
+
+  /**
+   * Delete a hold
+   */
+  async deleteRMHold(holdId: number): Promise<{ success: boolean }> {
+    await this.request<any>('DELETE', `/v1/holds/${holdId}`);
+    return { success: true };
+  }
+
+  /**
+   * Get holds on a node
+   */
+  async getNodeRMHolds(nodeId: number): Promise<RMNodeHoldsResponse> {
+    const response = await this.request<any>('GET', `/v1/nodes/${nodeId}/holds`);
+
+    const holds: RMHold[] = [];
+    const data = response.data || response.results || response;
+
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        holds.push(this.parseRMHold(item));
+      }
+    } else if (data && data.holds) {
+      for (const item of data.holds) {
+        holds.push(this.parseRMHold(item));
+      }
+    }
+
+    return {
+      node_id: nodeId,
+      holds,
+    };
+  }
+
+  /**
+   * Apply hold to a node
+   */
+  async applyRMHold(nodeId: number, holdId: number): Promise<{ success: boolean }> {
+    const formData = new URLSearchParams();
+    formData.append('hold_id', holdId.toString());
+
+    await this.request<any>('POST', `/v1/nodes/${nodeId}/holds`, undefined, formData);
+    return { success: true };
+  }
+
+  /**
+   * Remove hold from a node
+   */
+  async removeRMHold(nodeId: number, holdId: number): Promise<{ success: boolean }> {
+    await this.request<any>('DELETE', `/v1/nodes/${nodeId}/holds/${holdId}`);
+    return { success: true };
+  }
+
+  /**
+   * Apply hold to multiple nodes
+   */
+  async applyRMHoldBatch(nodeIds: number[], holdId: number): Promise<{ success: boolean; count: number }> {
+    const formData = new URLSearchParams();
+    formData.append('hold_id', holdId.toString());
+    formData.append('ids', nodeIds.join(','));
+
+    await this.request<any>('POST', `/v1/rmclassifications/applyhold`, undefined, formData);
+    return { success: true, count: nodeIds.length };
+  }
+
+  /**
+   * Remove hold from multiple nodes
+   */
+  async removeRMHoldBatch(nodeIds: number[], holdId: number): Promise<{ success: boolean; count: number }> {
+    const formData = new URLSearchParams();
+    formData.append('hold_id', holdId.toString());
+    formData.append('ids', nodeIds.join(','));
+
+    await this.request<any>('POST', `/v1/rmclassifications/removehold`, undefined, formData);
+    return { success: true, count: nodeIds.length };
+  }
+
+  /**
+   * Get items under a hold
+   */
+  async getRMHoldItems(holdId: number, options?: { page?: number; limit?: number }): Promise<RMHoldItemsResponse> {
+    let path = `/v2/holditems/${holdId}`;
+    if (options?.page && options.page > 1) {
+      path = `/v2/holditems/${holdId}/page?page=${options.page}`;
+      if (options.limit) path += `&limit=${options.limit}`;
+    } else if (options?.limit) {
+      path += `?limit=${options.limit}`;
+    }
+
+    const response = await this.request<any>('GET', path);
+    const data = response.data || response.results || response;
+
+    const items: Array<{ id: number; name: string; type: number; type_name: string }> = [];
+    const itemsArray = Array.isArray(data) ? data : (data.items || []);
+
+    for (const item of itemsArray) {
+      items.push({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        type_name: item.type_name,
+      });
+    }
+
+    return {
+      hold_id: holdId,
+      items,
+      total_count: response.collection?.paging?.total_count || items.length,
+      page: options?.page || 1,
+      limit: options?.limit,
+    };
+  }
+
+  /**
+   * Get users assigned to a hold
+   */
+  async getRMHoldUsers(holdId: number): Promise<RMHoldUsersResponse> {
+    const response = await this.request<any>('GET', `/v2/userholds/getusers/${holdId}`);
+    const data = response.data || response.results || response;
+
+    const users: Array<{ id: number; name: string; display_name?: string }> = [];
+    const usersArray = Array.isArray(data) ? data : (data.users || []);
+
+    for (const user of usersArray) {
+      users.push({
+        id: user.id,
+        name: user.name,
+        display_name: user.display_name,
+      });
+    }
+
+    return {
+      hold_id: holdId,
+      users,
+    };
+  }
+
+  /**
+   * Add users to a hold
+   */
+  async addRMHoldUsers(holdId: number, userIds: number[]): Promise<{ success: boolean }> {
+    const body = {
+      hold_id: holdId,
+      user_ids: userIds,
+    };
+
+    await this.request<any>('POST', `/v2/userholds/addusers`, body);
+    return { success: true };
+  }
+
+  /**
+   * Remove users from a hold
+   */
+  async removeRMHoldUsers(holdId: number, userIds: number[]): Promise<{ success: boolean }> {
+    const body = {
+      hold_id: holdId,
+      user_ids: userIds,
+    };
+
+    await this.request<any>('POST', `/v2/userholds/removeusers`, body);
+    return { success: true };
+  }
+
+  private parseRMHold(data: any): RMHold {
+    return {
+      id: data.id || data.hold_id || 0,
+      name: data.name || '',
+      comment: data.comment,
+      type: data.type,
+      type_name: data.type_name,
+      parent_id: data.parent_id,
+      create_date: data.create_date,
+      modify_date: data.modify_date,
+      create_user_id: data.create_user_id,
+      items_count: data.items_count,
+      alternate_hold_id: data.alternate_hold_id,
+    };
+  }
+
+  // ============ Records Management: Cross-References ============
+
+  /**
+   * List all cross-reference types
+   */
+  async listRMCrossRefTypes(): Promise<RMCrossRefTypesResponse> {
+    const response = await this.request<any>('GET', `/v1/xrefs`);
+
+    const types: RMCrossRefType[] = [];
+    const data = response.data || response.results || response;
+
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        types.push({
+          name: item.name || item.xref_type,
+          description: item.description,
+          in_use: item.in_use,
+        });
+      }
+    } else if (data && data.xrefs) {
+      for (const item of data.xrefs) {
+        types.push({
+          name: item.name || item.xref_type,
+          description: item.description,
+          in_use: item.in_use,
+        });
+      }
+    }
+
+    return { types };
+  }
+
+  /**
+   * Get cross-reference type details
+   */
+  async getRMCrossRefType(xrefType: string): Promise<RMCrossRefType> {
+    const response = await this.request<any>('GET', `/v1/xrefs/${encodeURIComponent(xrefType)}`);
+    const data = response.data || response.results || response;
+
+    return {
+      name: data.name || data.xref_type || xrefType,
+      description: data.description,
+      in_use: data.in_use,
+    };
+  }
+
+  /**
+   * Create a new cross-reference type
+   */
+  async createRMCrossRefType(name: string, description?: string): Promise<RMCrossRefType> {
+    const formData = new URLSearchParams();
+    formData.append('name', name);
+    if (description) formData.append('description', description);
+
+    const response = await this.request<any>('POST', `/v1/xrefs`, undefined, formData);
+    const data = response.data || response.results || response;
+
+    return {
+      name: data.name || name,
+      description: data.description || description,
+      in_use: false,
+    };
+  }
+
+  /**
+   * Delete a cross-reference type (only if not in use)
+   */
+  async deleteRMCrossRefType(xrefType: string): Promise<{ success: boolean }> {
+    await this.request<any>('DELETE', `/v1/xrefs/${encodeURIComponent(xrefType)}`);
+    return { success: true };
+  }
+
+  /**
+   * Get cross-references on a node
+   */
+  async getNodeRMCrossRefs(nodeId: number): Promise<RMNodeCrossRefsResponse> {
+    const response = await this.request<any>('GET', `/v1/nodes/${nodeId}/xrefs`);
+
+    const crossRefs: RMCrossRef[] = [];
+    const data = response.data || response.results || response;
+
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        crossRefs.push(this.parseRMCrossRef(item));
+      }
+    } else if (data && data.xrefs) {
+      for (const item of data.xrefs) {
+        crossRefs.push(this.parseRMCrossRef(item));
+      }
+    }
+
+    return {
+      node_id: nodeId,
+      cross_references: crossRefs,
+    };
+  }
+
+  /**
+   * Apply cross-reference to a node
+   */
+  async applyRMCrossRef(params: RMCrossRefApplyParams): Promise<{ success: boolean }> {
+    const formData = new URLSearchParams();
+    formData.append('xref_type', params.xref_type);
+    formData.append('ref_node_id', params.ref_node_id.toString());
+
+    await this.request<any>('POST', `/v1/nodes/${params.node_id}/xrefs`, undefined, formData);
+    return { success: true };
+  }
+
+  /**
+   * Remove cross-reference from a node
+   */
+  async removeRMCrossRef(nodeId: number, xrefType: string, refNodeId: number): Promise<{ success: boolean }> {
+    await this.request<any>('DELETE', `/v1/nodes/${nodeId}/xrefs/${encodeURIComponent(xrefType)}/refnodes/${refNodeId}`);
+    return { success: true };
+  }
+
+  /**
+   * Apply cross-reference to multiple nodes
+   */
+  async applyRMCrossRefBatch(nodeIds: number[], xrefType: string, refNodeId: number): Promise<{ success: boolean; count: number }> {
+    const formData = new URLSearchParams();
+    formData.append('xref_type', xrefType);
+    formData.append('ref_node_id', refNodeId.toString());
+    formData.append('ids', nodeIds.join(','));
+
+    await this.request<any>('POST', `/v1/rmclassifications/assignxref`, undefined, formData);
+    return { success: true, count: nodeIds.length };
+  }
+
+  /**
+   * Remove cross-reference from multiple nodes
+   */
+  async removeRMCrossRefBatch(nodeIds: number[], xrefType: string, refNodeId: number): Promise<{ success: boolean; count: number }> {
+    const formData = new URLSearchParams();
+    formData.append('xref_type', xrefType);
+    formData.append('ref_node_id', refNodeId.toString());
+    formData.append('ids', nodeIds.join(','));
+
+    await this.request<any>('POST', `/v1/rmclassifications/removexref`, undefined, formData);
+    return { success: true, count: nodeIds.length };
+  }
+
+  private parseRMCrossRef(data: any): RMCrossRef {
+    return {
+      xref_type: data.xref_type || data.type,
+      xref_type_name: data.xref_type_name || data.type_name,
+      ref_node_id: data.ref_node_id || data.node_id,
+      ref_node_name: data.ref_node_name || data.name,
+      ref_node_type: data.ref_node_type,
+      ref_node_type_name: data.ref_node_type_name,
+    };
   }
 }

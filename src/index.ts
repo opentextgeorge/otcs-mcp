@@ -50,7 +50,7 @@ const TOOL_PROFILES: Record<string, string[]> = {
     'otcs_members', 'otcs_permissions', 'otcs_categories',
   ],
   admin: [
-    // Core tools plus admin/permission management
+    // Core tools plus admin/permission management and RM
     'otcs_authenticate', 'otcs_session_status', 'otcs_logout',
     'otcs_get_node', 'otcs_browse', 'otcs_search',
     'otcs_create_folder', 'otcs_node_action',
@@ -61,6 +61,18 @@ const TOOL_PROFILES: Record<string, string[]> = {
     'otcs_get_assignments', 'otcs_workflow_form', 'otcs_workflow_task',
     'otcs_members', 'otcs_group_membership',
     'otcs_permissions', 'otcs_categories', 'otcs_workspace_metadata',
+    'otcs_rm_classification', 'otcs_rm_holds', 'otcs_rm_xref',
+  ],
+  rm: [
+    // Core tools plus Records Management
+    'otcs_authenticate', 'otcs_session_status',
+    'otcs_get_node', 'otcs_browse', 'otcs_search',
+    'otcs_create_folder', 'otcs_node_action',
+    'otcs_upload', 'otcs_download_content',
+    'otcs_versions',
+    'otcs_search_workspaces', 'otcs_get_workspace',
+    'otcs_members', 'otcs_permissions', 'otcs_categories',
+    'otcs_rm_classification', 'otcs_rm_holds', 'otcs_rm_xref',
   ],
 };
 
@@ -547,6 +559,68 @@ const allTools: Tool[] = [
         apply_to: { type: 'number', enum: [0, 1, 2, 3], description: '0=This Item, 1=Sub-Items, 2=This & Sub, 3=Immediate Children' },
       },
       required: ['action', 'node_id'],
+    },
+  },
+
+  // ==================== Records Management (3 consolidated tools) ====================
+  {
+    name: 'otcs_rm_classification',
+    description: 'Manage Records Management classifications. Actions: get_classifications (list available), declare (apply classification to node), undeclare (remove), update_details (record properties), make_confidential, remove_confidential, finalize (make record immutable).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['get_classifications', 'declare', 'undeclare', 'update_details', 'make_confidential', 'remove_confidential', 'finalize'], description: 'Action to perform' },
+        node_id: { type: 'number', description: 'Node ID (for declare/undeclare/update_details/make_confidential/remove_confidential/finalize)' },
+        node_ids: { type: 'array', items: { type: 'number' }, description: 'Array of node IDs (for finalize batch)' },
+        classification_id: { type: 'number', description: 'Classification ID to apply (for declare)' },
+        parent_id: { type: 'number', description: 'Parent container ID (for get_classifications)' },
+        name: { type: 'string', description: 'Updated record name (for update_details)' },
+        official: { type: 'boolean', description: 'Mark as official record (for update_details)' },
+        storage: { type: 'string', description: 'Storage location (for update_details)' },
+        accession: { type: 'string', description: 'Accession number (for update_details)' },
+        subject: { type: 'string', description: 'Subject keywords (for update_details)' },
+        rsi_data: { type: 'object', description: 'RSI-specific data (for declare)', properties: { rsid: { type: 'number' }, status_date: { type: 'string' } } },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'otcs_rm_holds',
+    description: 'Manage Legal and Administrative Holds. Actions: list_holds, get_hold, create_hold, update_hold, delete_hold, get_node_holds (holds on a node), apply_hold, remove_hold, apply_batch, remove_batch, get_hold_items, get_hold_users, add_hold_users, remove_hold_users.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list_holds', 'get_hold', 'create_hold', 'update_hold', 'delete_hold', 'get_node_holds', 'apply_hold', 'remove_hold', 'apply_batch', 'remove_batch', 'get_hold_items', 'get_hold_users', 'add_hold_users', 'remove_hold_users'], description: 'Action to perform' },
+        hold_id: { type: 'number', description: 'Hold ID (for get/update/delete/apply/remove/items/users operations)' },
+        node_id: { type: 'number', description: 'Node ID (for get_node_holds/apply_hold/remove_hold)' },
+        node_ids: { type: 'array', items: { type: 'number' }, description: 'Array of node IDs (for batch operations)' },
+        user_ids: { type: 'array', items: { type: 'number' }, description: 'Array of user IDs (for add/remove users)' },
+        name: { type: 'string', description: 'Hold name (for create/update)' },
+        hold_type: { type: 'string', enum: ['Legal', 'Administrative'], description: 'Hold type (for create)' },
+        comment: { type: 'string', description: 'Comment (for create/update)' },
+        alternate_id: { type: 'string', description: 'Alternate ID/matter number (for create/update)' },
+        date_to_release: { type: 'string', description: 'Planned release date yyyy-mm-dd (for create/update)' },
+        include_child: { type: 'boolean', description: 'Include children when applying hold', default: true },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'otcs_rm_xref',
+    description: 'Manage RM Cross-References between records. Actions: list_types, get_type, create_type, delete_type, get_node_xrefs (xrefs on a node), apply, remove, apply_batch, remove_batch.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list_types', 'get_type', 'create_type', 'delete_type', 'get_node_xrefs', 'apply', 'remove', 'apply_batch', 'remove_batch'], description: 'Action to perform' },
+        type_name: { type: 'string', description: 'Cross-reference type name (for get_type/delete_type/apply/remove)' },
+        node_id: { type: 'number', description: 'Source node ID (for get_node_xrefs/apply/remove)' },
+        target_node_id: { type: 'number', description: 'Target node ID (for apply/remove)' },
+        node_ids: { type: 'array', items: { type: 'number' }, description: 'Source node IDs (for batch operations)' },
+        target_node_ids: { type: 'array', items: { type: 'number' }, description: 'Target node IDs (for batch operations)' },
+        name: { type: 'string', description: 'Type name (for create_type)' },
+        reciprocal_name: { type: 'string', description: 'Reciprocal type name (for create_type)' },
+      },
+      required: ['action'],
     },
   },
 ];
@@ -1045,6 +1119,164 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
           if (!permissions) throw new Error('permissions required (use empty array to remove public access)');
           const publicResult = await client.updatePublicPermissions(node_id, permissions as any, { apply_to: apply_to as any });
           return { ...publicResult, message: permissions.length > 0 ? 'Public access updated' : 'Public access removed', public_permissions: permissions };
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+    }
+
+    // ==================== Records Management ====================
+    case 'otcs_rm_classification': {
+      const { action, node_id, node_ids, classification_id, name, official, storage, accession, subject } = args as {
+        action: string; node_id?: number; node_ids?: number[]; classification_id?: number;
+        name?: string; official?: boolean; storage?: string; accession?: string; subject?: string;
+      };
+
+      switch (action) {
+        case 'get_classifications':
+          if (!node_id) throw new Error('node_id required');
+          const classResult = await client.getRMClassifications(node_id);
+          return { node_id, classifications: classResult.classifications, count: classResult.classifications.length, message: `Found ${classResult.classifications.length} classification(s)` };
+        case 'declare':
+          if (!node_id || !classification_id) throw new Error('node_id and classification_id required');
+          const declareResult = await client.applyRMClassification({ node_id, class_id: classification_id, official });
+          return { success: true, result: declareResult, message: `Node ${node_id} declared as record under classification ${classification_id}` };
+        case 'undeclare':
+          if (!node_id || !classification_id) throw new Error('node_id and classification_id required');
+          const undeclareResult = await client.removeRMClassification(node_id, classification_id);
+          return { success: true, result: undeclareResult, message: `Record classification removed from node ${node_id}` };
+        case 'update_details':
+          if (!node_id) throw new Error('node_id required');
+          const updateResult = await client.updateRMRecordDetails({ node_id, official, accession_code: accession, comments: subject });
+          return { success: true, result: updateResult, message: `Record ${node_id} details updated` };
+        case 'make_confidential':
+          if (!node_id) throw new Error('node_id required');
+          const confResult = await client.makeRMConfidential(node_id);
+          return { success: true, result: confResult, message: `Node ${node_id} marked as confidential` };
+        case 'remove_confidential':
+          if (!node_id) throw new Error('node_id required');
+          const unconfResult = await client.removeRMConfidential(node_id);
+          return { success: true, result: unconfResult, message: `Confidential flag removed from node ${node_id}` };
+        case 'finalize':
+          if (!node_id && !node_ids) throw new Error('node_id or node_ids required');
+          const idsToFinalize = node_ids || [node_id!];
+          const finalizeResult = await client.finalizeRMRecords(idsToFinalize);
+          return { success: true, result: finalizeResult, message: `${idsToFinalize.length} record(s) finalized`, node_ids: idsToFinalize };
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+    }
+
+    case 'otcs_rm_holds': {
+      const { action, hold_id, node_id, node_ids, user_ids, name, hold_type, comment, alternate_id } = args as {
+        action: string; hold_id?: number; node_id?: number; node_ids?: number[]; user_ids?: number[];
+        name?: string; hold_type?: 'Legal' | 'Administrative'; comment?: string; alternate_id?: string;
+      };
+
+      switch (action) {
+        case 'list_holds':
+          const holdsResult = await client.listRMHolds();
+          return { holds: holdsResult.holds, count: holdsResult.holds.length, message: `Found ${holdsResult.holds.length} hold(s)` };
+        case 'get_hold':
+          if (!hold_id) throw new Error('hold_id required');
+          const hold = await client.getRMHold(hold_id);
+          return { hold, message: `Retrieved hold ${hold_id}` };
+        case 'create_hold':
+          if (!name) throw new Error('name required');
+          const newHold = await client.createRMHold({ name, comment, type: hold_type, alternate_hold_id: alternate_id });
+          return { success: true, hold: newHold, message: `Hold "${name}" created` };
+        case 'update_hold':
+          if (!hold_id) throw new Error('hold_id required');
+          const updatedHold = await client.updateRMHold(hold_id, { name, comment, alternate_hold_id: alternate_id });
+          return { success: true, hold: updatedHold, message: `Hold ${hold_id} updated` };
+        case 'delete_hold':
+          if (!hold_id) throw new Error('hold_id required');
+          await client.deleteRMHold(hold_id);
+          return { success: true, message: `Hold ${hold_id} deleted` };
+        case 'get_node_holds':
+          if (!node_id) throw new Error('node_id required');
+          const nodeHoldsResult = await client.getNodeRMHolds(node_id);
+          return { node_id, holds: nodeHoldsResult.holds, count: nodeHoldsResult.holds.length, message: `Node ${node_id} has ${nodeHoldsResult.holds.length} hold(s)` };
+        case 'apply_hold':
+          if (!hold_id || !node_id) throw new Error('hold_id and node_id required');
+          const applyResult = await client.applyRMHold(node_id, hold_id);
+          return { success: true, result: applyResult, message: `Hold ${hold_id} applied to node ${node_id}` };
+        case 'remove_hold':
+          if (!hold_id || !node_id) throw new Error('hold_id and node_id required');
+          const removeResult = await client.removeRMHold(node_id, hold_id);
+          return { success: true, result: removeResult, message: `Hold ${hold_id} removed from node ${node_id}` };
+        case 'apply_batch':
+          if (!hold_id || !node_ids || node_ids.length === 0) throw new Error('hold_id and node_ids required');
+          const applyBatchResult = await client.applyRMHoldBatch(node_ids, hold_id);
+          return { success: true, result: applyBatchResult, message: `Hold ${hold_id} applied to ${node_ids.length} node(s)` };
+        case 'remove_batch':
+          if (!hold_id || !node_ids || node_ids.length === 0) throw new Error('hold_id and node_ids required');
+          const removeBatchResult = await client.removeRMHoldBatch(node_ids, hold_id);
+          return { success: true, result: removeBatchResult, message: `Hold ${hold_id} removed from ${node_ids.length} node(s)` };
+        case 'get_hold_items':
+          if (!hold_id) throw new Error('hold_id required');
+          const holdItemsResult = await client.getRMHoldItems(hold_id);
+          return { hold_id, items: holdItemsResult.items, count: holdItemsResult.items.length, message: `Hold ${hold_id} contains ${holdItemsResult.items.length} item(s)` };
+        case 'get_hold_users':
+          if (!hold_id) throw new Error('hold_id required');
+          const holdUsersResult = await client.getRMHoldUsers(hold_id);
+          return { hold_id, users: holdUsersResult.users, count: holdUsersResult.users.length, message: `Hold ${hold_id} has ${holdUsersResult.users.length} authorized user(s)` };
+        case 'add_hold_users':
+          if (!hold_id || !user_ids || user_ids.length === 0) throw new Error('hold_id and user_ids required');
+          const addUsersResult = await client.addRMHoldUsers(hold_id, user_ids);
+          return { success: true, result: addUsersResult, message: `${user_ids.length} user(s) added to hold ${hold_id}` };
+        case 'remove_hold_users':
+          if (!hold_id || !user_ids || user_ids.length === 0) throw new Error('hold_id and user_ids required');
+          const removeUsersResult = await client.removeRMHoldUsers(hold_id, user_ids);
+          return { success: true, result: removeUsersResult, message: `${user_ids.length} user(s) removed from hold ${hold_id}` };
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+    }
+
+    case 'otcs_rm_xref': {
+      const { action, type_name, node_id, target_node_id, node_ids, target_node_ids, name, reciprocal_name } = args as {
+        action: string; type_name?: string; node_id?: number; target_node_id?: number;
+        node_ids?: number[]; target_node_ids?: number[]; name?: string; reciprocal_name?: string;
+      };
+
+      switch (action) {
+        case 'list_types':
+          const xrefTypesResult = await client.listRMCrossRefTypes();
+          return { types: xrefTypesResult.types, count: xrefTypesResult.types.length, message: `Found ${xrefTypesResult.types.length} cross-reference type(s)` };
+        case 'get_type':
+          if (!type_name) throw new Error('type_name required');
+          const xrefType = await client.getRMCrossRefType(type_name);
+          return { type: xrefType, message: `Retrieved cross-reference type "${type_name}"` };
+        case 'create_type':
+          if (!name) throw new Error('name required');
+          const newType = await client.createRMCrossRefType(name, reciprocal_name);
+          return { success: true, type: newType, message: `Cross-reference type "${name}" created` };
+        case 'delete_type':
+          if (!type_name) throw new Error('type_name required');
+          await client.deleteRMCrossRefType(type_name);
+          return { success: true, message: `Cross-reference type "${type_name}" deleted` };
+        case 'get_node_xrefs':
+          if (!node_id) throw new Error('node_id required');
+          const nodeXrefsResult = await client.getNodeRMCrossRefs(node_id);
+          return { node_id, cross_references: nodeXrefsResult.cross_references, count: nodeXrefsResult.cross_references.length, message: `Node ${node_id} has ${nodeXrefsResult.cross_references.length} cross-reference(s)` };
+        case 'apply':
+          if (!node_id || !target_node_id || !type_name) throw new Error('node_id, target_node_id, and type_name required');
+          const applyXrefResult = await client.applyRMCrossRef({ node_id, ref_node_id: target_node_id, xref_type: type_name });
+          return { success: true, result: applyXrefResult, message: `Cross-reference created between ${node_id} and ${target_node_id}` };
+        case 'remove':
+          if (!node_id || !target_node_id || !type_name) throw new Error('node_id, target_node_id, and type_name required');
+          const removeXrefResult = await client.removeRMCrossRef(node_id, type_name, target_node_id);
+          return { success: true, result: removeXrefResult, message: `Cross-reference removed between ${node_id} and ${target_node_id}` };
+        case 'apply_batch':
+          if (!node_ids || !target_node_ids || !type_name) throw new Error('node_ids, target_node_ids, and type_name required');
+          if (node_ids.length !== target_node_ids.length) throw new Error('node_ids and target_node_ids must have same length');
+          const applyBatchResult = await client.applyRMCrossRefBatch(node_ids, type_name, target_node_ids[0]);
+          return { success: true, result: applyBatchResult, message: `${node_ids.length} cross-reference(s) created` };
+        case 'remove_batch':
+          if (!node_ids || !target_node_ids || !type_name) throw new Error('node_ids, target_node_ids, and type_name required');
+          if (node_ids.length !== target_node_ids.length) throw new Error('node_ids and target_node_ids must have same length');
+          const removeBatchResult = await client.removeRMCrossRefBatch(node_ids, type_name, target_node_ids[0]);
+          return { success: true, result: removeBatchResult, message: `${node_ids.length} cross-reference(s) removed` };
         default:
           throw new Error(`Unknown action: ${action}`);
       }

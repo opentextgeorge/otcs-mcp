@@ -4,7 +4,7 @@ An MCP (Model Context Protocol) server for OpenText Content Server that enables 
 
 - **Content Server REST API** - Core document/folder operations, workflows, and assignments
 - **Business Workspaces REST API** - Workspace and team management
-- **Records Management REST API** - Compliance, retention, and holds (coming soon)
+- **Records Management REST API** - Compliance, holds, and cross-references
 
 ## Current Status
 
@@ -15,11 +15,11 @@ An MCP (Model Context Protocol) server for OpenText Content Server that enables 
 | 3. Workflows | ✅ Complete | Assignments, forms, tasks, lifecycle |
 | 4. Metadata | ✅ Complete | Categories, forms, workspace properties |
 | 5. Permissions & Users | ✅ Complete | Members, groups, ACL management |
-| 6. RM Core | Planned | Classifications, holds, cross-references |
+| 6. RM Core | ✅ Complete | Classifications, holds, cross-references |
 | 7. RM Advanced | Planned | RSI schedules, disposition processing |
 | 8. Enhanced Features | Planned | Favorites, reminders, notifications, recycle bin |
 
-**Current: 33 tools** | **Projected: 42 tools** (consolidated for AI agent performance)
+**Current: 36 tools** | **Projected: 42 tools** (consolidated for AI agent performance)
 
 ## Tool Profiles
 
@@ -29,12 +29,13 @@ To optimize for different AI clients, you can select a tool profile:
 |---------|-------|----------|
 | `core` | 18 | Basic document management |
 | `workflow` | 27 | Document management + full workflow |
-| `admin` | 25 | Document management + permissions/admin |
-| `full` | 33 | All tools (default) |
+| `admin` | 28 | Document management + permissions/admin + RM |
+| `rm` | 18 | Document management + Records Management |
+| `full` | 36 | All tools (default) |
 
 Configure via environment variable:
 ```bash
-OTCS_TOOL_PROFILE=core  # or workflow, admin, full
+OTCS_TOOL_PROFILE=core  # or workflow, admin, rm, full
 ```
 
 ## Tools Reference
@@ -130,6 +131,14 @@ OTCS_TOOL_PROFILE=core  # or workflow, admin, full
 **Permission strings:** `see`, `see_contents`, `modify`, `edit_attributes`, `add_items`, `reserve`, `add_major_version`, `delete_versions`, `delete`, `edit_permissions`
 
 **Apply-to scope:** `0`=This Item, `1`=Sub-Items, `2`=Both, `3`=Immediate Children
+
+### Records Management (3 tools)
+
+| Tool | Actions | Description |
+|------|---------|-------------|
+| `otcs_rm_classification` | `get_classifications`, `declare`, `undeclare`, `update_details`, `make_confidential`, `remove_confidential`, `finalize` | Manage record classifications |
+| `otcs_rm_holds` | `list_holds`, `get_hold`, `create_hold`, `update_hold`, `delete_hold`, `get_node_holds`, `apply_hold`, `remove_hold`, `apply_batch`, `remove_batch`, `get_hold_items`, `get_hold_users`, `add_hold_users`, `remove_hold_users` | Legal/administrative holds |
+| `otcs_rm_xref` | `list_types`, `get_type`, `create_type`, `delete_type`, `get_node_xrefs`, `apply`, `remove`, `apply_batch`, `remove_batch` | Cross-references between records |
 
 ## Installation
 
@@ -302,6 +311,28 @@ Agent: Check what permissions a user has
 Tool: otcs_permissions(action="effective", node_id=12345, member_id=1001)
 ```
 
+### Records Management
+
+```
+Agent: Get classifications on a document
+Tool: otcs_rm_classification(action="get_classifications", node_id=12345)
+
+Agent: Declare a document as a record
+Tool: otcs_rm_classification(action="declare", node_id=12345, classification_id=5001)
+
+Agent: List all legal holds
+Tool: otcs_rm_holds(action="list_holds")
+
+Agent: Create a new legal hold
+Tool: otcs_rm_holds(action="create_hold", name="Litigation Hold 2024", hold_type="Legal")
+
+Agent: Apply a hold to a document
+Tool: otcs_rm_holds(action="apply_hold", hold_id=100, node_id=12345)
+
+Agent: Create a cross-reference between records
+Tool: otcs_rm_xref(action="apply", node_id=12345, target_node_id=67890, type_name="Related To")
+```
+
 ## Development
 
 ```bash
@@ -316,7 +347,7 @@ npm run dev           # Development mode with auto-reload
 ```
 otcs-mcp/
 ├── src/
-│   ├── index.ts              # MCP server entry point (33 consolidated tools)
+│   ├── index.ts              # MCP server entry point (36 consolidated tools)
 │   ├── types.ts              # TypeScript type definitions
 │   └── client/
 │       └── otcs-client.ts    # OTCS REST API client
@@ -333,11 +364,6 @@ otcs-mcp/
 ```
 
 ## Roadmap
-
-### Phase 6: Records Management - Core (3 tools)
-- `otcs_rm_classification` - Declare records, manage RM classifications
-- `otcs_rm_holds` - Legal/administrative holds management
-- `otcs_rm_xref` - Cross-references between records
 
 ### Phase 7: Records Management - Advanced (2 tools)
 - `otcs_rm_rsi` - RSI (Record Series Identifier) schedules

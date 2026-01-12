@@ -1014,3 +1014,175 @@ export interface EffectivePermissions {
   member_id: number;
   permissions: PermissionString[];
 }
+
+// ============ Records Management Types ============
+
+/**
+ * RM Classification on a node
+ */
+export interface RMClassification {
+  id: number;
+  name: string;
+  class_id?: number;
+  classification_id?: number;
+  classification_name?: string;
+  official?: boolean;
+  vital_record?: boolean;
+  confidential?: boolean;
+  finalized?: boolean;
+  essential?: boolean;
+  rsi_id?: number;
+  rsi_name?: string;
+  status?: string;
+  create_date?: string;
+  modify_date?: string;
+}
+
+/**
+ * RM Classifications response
+ */
+export interface RMClassificationsResponse {
+  node_id: number;
+  classifications: RMClassification[];
+}
+
+/**
+ * Parameters for applying RM classification
+ */
+export interface RMClassificationApplyParams {
+  node_id: number;
+  class_id: number;
+  official?: boolean;
+  vital_record?: boolean;
+  essential?: boolean;
+}
+
+/**
+ * Parameters for updating record details
+ */
+export interface RMRecordUpdateParams {
+  node_id: number;
+  official?: boolean;
+  vital_record?: boolean;
+  essential?: boolean;
+  accession_code?: string;
+  alt_retention?: string;
+  comments?: string;
+}
+
+/**
+ * Hold (Legal or Administrative)
+ */
+export interface RMHold {
+  id: number;
+  name: string;
+  comment?: string;
+  type?: string;  // 'LegalHold' or 'AdminHold'
+  type_name?: string;
+  parent_id?: number;
+  create_date?: string;
+  modify_date?: string;
+  create_user_id?: number;
+  items_count?: number;
+  alternate_hold_id?: string;
+}
+
+/**
+ * Hold list response
+ */
+export interface RMHoldsResponse {
+  holds: RMHold[];
+  total_count?: number;
+}
+
+/**
+ * Node holds response
+ */
+export interface RMNodeHoldsResponse {
+  node_id: number;
+  holds: RMHold[];
+}
+
+/**
+ * Hold items response
+ */
+export interface RMHoldItemsResponse {
+  hold_id: number;
+  items: Array<{
+    id: number;
+    name: string;
+    type: number;
+    type_name: string;
+  }>;
+  total_count?: number;
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * Hold users response
+ */
+export interface RMHoldUsersResponse {
+  hold_id: number;
+  users: Array<{
+    id: number;
+    name: string;
+    display_name?: string;
+  }>;
+}
+
+/**
+ * Parameters for creating/updating a hold
+ */
+export interface RMHoldParams {
+  name: string;
+  comment?: string;
+  type?: string;
+  parent_id?: number;
+  alternate_hold_id?: string;
+}
+
+/**
+ * Cross-reference type
+ */
+export interface RMCrossRefType {
+  name: string;
+  description?: string;
+  in_use?: boolean;
+}
+
+/**
+ * Cross-reference on a node
+ */
+export interface RMCrossRef {
+  xref_type: string;
+  xref_type_name?: string;
+  ref_node_id: number;
+  ref_node_name?: string;
+  ref_node_type?: number;
+  ref_node_type_name?: string;
+}
+
+/**
+ * Node cross-references response
+ */
+export interface RMNodeCrossRefsResponse {
+  node_id: number;
+  cross_references: RMCrossRef[];
+}
+
+/**
+ * All cross-reference types response
+ */
+export interface RMCrossRefTypesResponse {
+  types: RMCrossRefType[];
+}
+
+/**
+ * Parameters for applying cross-reference
+ */
+export interface RMCrossRefApplyParams {
+  node_id: number;
+  xref_type: string;
+  ref_node_id: number;
+}
