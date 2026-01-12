@@ -1,0 +1,850 @@
+# OpenText Content Server MCP Tools Architecture Plan
+
+## Executive Summary
+
+This document outlines the architecture for MCP (Model Context Protocol) tools that enable AI agents to intelligently manage documents, workspaces, folders, and metadata in OpenText Content Server. The tools leverage two REST APIs:
+
+1. **Content Server REST API** - Core node/document operations, versioning, search, permissions
+2. **Business Workspaces REST API** - Workspace management, roles, relations, business object integration
+3. **Records Management REST API** - Classifications, holds, dispositions, RSI schedules, physical objects, security clearance
+
+---
+
+## Core Design Principles
+
+### 1. Agent-Friendly Abstractions
+- Tools should map to **user intentions** not raw API endpoints
+- Combine multiple API calls into single intelligent operations where sensible
+- Return structured, actionable information the agent can reason about
+
+### 2. Stateful Session Management
+- Maintain authentication ticket across tool invocations
+- Cache workspace type schemas and category definitions
+- Track recently accessed nodes for context
+
+### 3. Intelligent Error Handling
+- Transform API errors into actionable guidance
+- Suggest alternative approaches when operations fail
+- Validate inputs before making API calls
+
+---
+
+## Tool Categories
+
+### Category 1: Authentication & Session
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_authenticate` | Establish session with credentials | `POST /v1/auth` |
+| `otcs_session_status` | Check authentication state | `HEAD /v2/auth` |
+| `otcs_logout` | End session | `DELETE /v2/auth` |
+
+**Design Notes:**
+- Store ticket in MCP server state
+- Auto-refresh on 401 responses
+- Support domain-based authentication
+
+---
+
+### Category 2: Navigation & Discovery
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_browse` | List folder contents with metadata | `GET /v2/nodes/{id}/nodes` |
+| `otcs_get_node` | Get detailed node information | `GET /v2/nodes/{id}` |
+| `otcs_get_path` | Get node ancestry/breadcrumb | `GET /v2/nodes/{id}` with expand |
+| `otcs_get_volumes` | List accessible volumes | `GET /v2/volumes` |
+| `otcs_find_workspace_root` | Find business workspace for any node | `GET /v1/nodes/{id}/businessworkspace` |
+
+**Agent Use Cases:**
+- "Show me what's in the Project Alpha folder"
+- "Navigate to the contracts workspace"
+- "What's the path to document ID 12345?"
+
+---
+
+### Category 3: Search & Query
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_search` | Full-text and metadata search | `GET /v2/search` |
+| `otcs_search_workspaces` | Search business workspaces | `GET /v2/businessworkspaces` |
+| `otcs_search_advanced` | Complex query with filters | Business workspace column query |
+| `otcs_get_recent` | Recently accessed items | `GET /v2/members/accessed` |
+| `otcs_get_favorites` | User's favorite items | `GET /v2/members/favorites` |
+
+**Query Language Support:**
+```
+where_column_query=name LIKE '*Test' AND (WNF_ATT_35S_2 > 2020-03-20 OR status = 'Active')
+```
+
+**Agent Use Cases:**
+- "Find all contracts expiring this month"
+- "Search for documents containing 'quarterly report'"
+- "Show my recently accessed workspaces"
+
+---
+
+### Category 4: Folder Operations
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_create_folder` | Create folder with optional metadata | `POST /v2/nodes` (type=0) |
+| `otcs_create_folder_path` | Create nested folder hierarchy | Multiple `POST /v2/nodes` |
+| `otcs_list_folder` | List folder contents with filtering | `GET /v2/nodes/{id}/nodes` |
+| `otcs_get_folder_tree` | Get recursive folder structure | Recursive `GET /v2/nodes/{id}/nodes` |
+| `otcs_clone_folder_structure` | Replicate folder hierarchy to destination | Recursive copy operations |
+| `otcs_get_folder_size` | Get total size and item count | `GET /v2/nodes/{id}` + aggregation |
+| `otcs_empty_folder` | Delete all contents but keep folder | Batch `DELETE /v2/nodes/{id}` |
+| `otcs_flatten_folder` | Move all nested items to single level | Recursive move operations |
+
+**Parameters for `otcs_list_folder`:**
+```typescript
+{
+  folder_id: number;
+  filter?: {
+    type?: 'folders' | 'documents' | 'all';  // Filter by node type
+    name_pattern?: string;                    // e.g., "*.pdf", "report*"
+    modified_after?: string;                  // ISO date
+    modified_before?: string;
+  };
+  sort?: 'name' | 'date' | 'size' | 'type';
+  sort_order?: 'asc' | 'desc';
+  page?: number;
+  page_size?: number;
+  include_metadata?: boolean;                 // Include category values
+}
+```
+
+**Parameters for `otcs_create_folder_path`:**
+```typescript
+{
+  parent_id: number;
+  path: string;           // e.g., "2024/Q1/Reports/Final"
+  create_missing?: boolean; // Create intermediate folders (default: true)
+  metadata?: {            // Apply to leaf folder only, or all
+    apply_to: 'leaf' | 'all';
+    categories: Record<string, any>;
+  };
+}
+```
+
+**Agent Use Cases:**
+- "Create folder structure 2024/Q1/Reports in the Finance workspace"
+- "List all PDF files in the contracts folder modified this month"
+- "Show me the folder tree for the Project Alpha workspace"
+- "Clone the template folder structure to the new project"
+- "How many documents and what's the total size of the Archive folder?"
+
+---
+
+### Category 5: Document Operations
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_upload_document` | Upload file with metadata | `POST /v2/nodes` (type=144) |
+| `otcs_upload_large_document` | Chunked upload for large files | Multipart upload API |
+| `otcs_download_content` | Download document content | `GET /v2/nodes/{id}/content` |
+| `otcs_get_content_preview` | Get text preview/summary | `GET /v2/nodes/{id}/content` (text) |
+| `otcs_get_thumbnail` | Get document thumbnail | `GET /v2/nodes/{id}/thumbnails` |
+| `otcs_copy_node` | Copy node to destination | `POST /v2/nodes` with original_id |
+| `otcs_move_node` | Move node to destination | `PUT /v2/nodes/{id}` |
+| `otcs_delete_node` | Delete node | `DELETE /v2/nodes/{id}` |
+| `otcs_rename_node` | Rename node | `PUT /v2/nodes/{id}` |
+| `otcs_reserve_document` | Lock document for editing | `PUT /v2/nodes/{id}/reserve` |
+| `otcs_unreserve_document` | Release document lock | `DELETE /v2/nodes/{id}/reserve` |
+
+**Agent Use Cases:**
+- "Upload this contract to the legal folder"
+- "Move all draft documents to the archive"
+- "Reserve this document so I can edit it"
+- "Download the latest version of the proposal"
+
+---
+
+### Category 6: Version Management
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_list_versions` | Get version history | `GET /v2/nodes/{id}/versions` |
+| `otcs_add_version` | Upload new version | `POST /v2/nodes/{id}/versions` |
+| `otcs_get_version` | Get specific version | `GET /v2/nodes/{id}/versions/{version}` |
+| `otcs_download_version` | Download specific version | `GET /v2/nodes/{id}/versions/{v}/content` |
+| `otcs_promote_version` | Make version current | `PUT /v2/nodes/{id}/versions/{v}/promote` |
+| `otcs_compare_versions` | Compare two versions (metadata) | Multiple GET calls |
+
+**Agent Use Cases:**
+- "Show version history for this document"
+- "Upload a new version of the contract"
+- "Restore version 3 as the current version"
+
+---
+
+### Category 7: Business Workspace Management
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_create_workspace` | Create business workspace | `POST /v2/businessworkspaces` |
+| `otcs_create_workspaces_bulk` | Create multiple workspaces | `PUT /v2/businessworkspaces` |
+| `otcs_get_workspace` | Get workspace details | `GET /v2/businessworkspaces/{id}` |
+| `otcs_get_workspace_types` | List available workspace types | `GET /v2/businessworkspacetypes` |
+| `otcs_get_workspace_form` | Get creation form schema | `GET /v2/forms/businessworkspaces/create` |
+
+**Agent Use Cases:**
+- "Create a new Customer workspace for Acme Corp"
+- "What workspace types are available?"
+- "What fields are required for a Project workspace?"
+
+---
+
+### Category 8: Workspace Relations & Team
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_get_related_workspaces` | Get related workspaces | `GET /v2/businessworkspaces/{id}/relateditems` |
+| `otcs_add_workspace_relation` | Link workspaces | `POST /v2/businessworkspaces/{id}/relateditems` |
+| `otcs_remove_workspace_relation` | Unlink workspaces | `DELETE /v2/businessworkspaces/{id}/relateditems/{rel_id}` |
+| `otcs_get_workspace_members` | Get team members | `GET /v2/businessworkspaces/{id}/members` |
+| `otcs_get_workspace_roles` | Get roles | `GET /v2/businessworkspaces/{id}/roles` |
+| `otcs_add_role_member` | Add user to role | `POST /v2/businessworkspaces/{id}/roles/{role_id}/members` |
+| `otcs_remove_role_member` | Remove user from role | `DELETE .../members/{member_id}` |
+
+**Agent Use Cases:**
+- "Show all projects related to this customer"
+- "Add John to the Reviewer role"
+- "Who are the members of this workspace?"
+
+---
+
+### Category 9: Metadata & Categories
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_get_categories` | Get node categories | `GET /v2/nodes/{id}/categories` |
+| `otcs_add_category` | Apply category to node | `POST /v2/nodes/{id}/categories` |
+| `otcs_update_category` | Update category values | `PUT /v2/nodes/{id}/categories/{cat_id}` |
+| `otcs_remove_category` | Remove category | `DELETE /v2/nodes/{id}/categories/{cat_id}` |
+| `otcs_get_metadata_form` | Get update form schema | `GET /v2/forms/businessworkspaces/{id}/metadata/update` |
+| `otcs_update_workspace_metadata` | Update business properties | Combined operation |
+
+**Agent Use Cases:**
+- "Set the contract expiration date to December 31"
+- "What metadata categories are on this document?"
+- "Update the project status to 'In Review'"
+
+---
+
+### Category 10: Permissions
+
+| Tool | Purpose | API Operations |
+|------|---------|---------------|
+| `otcs_get_permissions` | Get node permissions | `GET /v2/nodes/{id}/permissions` |
+| `otcs_set_permissions` | Set user/group permissions | `POST /v2/nodes/{id}/permissions` |
+| `otcs_get_effective_permissions` | Get effective permissions | `GET /v2/nodes/{id}/permissions/effective` |
+
+**Agent Use Cases:**
+- "Who has access to this folder?"
+- "Grant read access to the Marketing team"
+- "What can I do with this document?"
+
+---
+
+### Category 11: Intelligent Composite Operations
+
+These tools combine multiple API calls for common agent workflows:
+
+| Tool | Purpose | Operations Combined |
+|------|---------|---------------------|
+| `otcs_file_document` | Smart filing with auto-categorization | Search workspace + Create node + Add categories |
+| `otcs_summarize_workspace` | Get workspace overview | Get workspace + Get members + Get related + Recent docs |
+| `otcs_workspace_report` | Generate workspace report | Multiple queries aggregated |
+| `otcs_bulk_update_metadata` | Update metadata on multiple nodes | Batch category updates |
+| `otcs_clone_folder_structure` | Replicate folder hierarchy | Recursive copy operations |
+
+---
+
+### Category 12: Workflow & Assignments
+
+OpenText Content Server provides comprehensive workflow capabilities for routing documents through approval and review processes.
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_get_assignments` | Get current user's workflow assignments | `GET /v2/members/assignments` |
+| `otcs_get_workflow_status` | Get workflows by status (pending, late, etc.) | `GET /v2/workflows/status` |
+| `otcs_get_active_workflows` | Get running workflows with filters | `GET /v2/workflows/status/active` |
+| `otcs_get_workflow_definition` | Get workflow map definition | `GET /v2/processes/{map_id}/definition` |
+| `otcs_get_workflow_tasks` | Get task list for a workflow instance | `GET /v2/workflows/status/processes/{process_id}` |
+| `otcs_get_workflow_activities` | Get workflow activity history | `GET /v2/processes/{id}/subprocesses/{sub_id}/activities` |
+| `otcs_create_draft_workflow` | Create draft process before initiation | `POST /v2/draftprocesses` |
+| `otcs_initiate_workflow` | Start a workflow instance | `POST /v2/processes` |
+| `otcs_start_workflow` | Start workflow (disabled start step) | `POST /v2/draftprocesses/startwf` |
+| `otcs_send_workflow_task` | Execute task action (SendOn, Delegate, Review) | `PUT /v2/processes/{id}/subprocesses/{sub}/tasks/{task}` |
+| `otcs_update_workflow_status` | Change process status (suspend/resume/stop) | `PUT /v2/processes/{id}/status` |
+| `otcs_delete_workflow` | Delete a workflow instance | `DELETE /v2/processes/{id}` |
+| `otcs_get_workflow_form` | Get workflow task form schema | `GET /v2/forms/workflowproperties` |
+
+**Parameters for `otcs_get_assignments`:**
+```typescript
+{
+  // Returns user's pending workflow tasks
+  // Each assignment includes:
+  //   - workflow_id, workflow_subworkflow_id, workflow_subworkflow_task_id
+  //   - name, instructions, priority, status
+  //   - date_due, from_user_id
+}
+```
+
+**Parameters for `otcs_send_workflow_task`:**
+```typescript
+{
+  process_id: number;           // Workflow instance ID
+  subprocess_id: number;        // Sub-workflow ID
+  task_id: number;              // Task ID
+  action?: string;              // Standard action: 'SendOn' | 'SendForReview' | 'Delegate'
+  custom_action?: string;       // Custom disposition action
+  comment?: string;             // Comment for the action
+}
+```
+
+**Parameters for `otcs_initiate_workflow`:**
+```typescript
+{
+  workflow_id: number;          // Workflow map ID
+  role_info?: Record<string, number>;  // Role assignments: { "Role1": userId, "Role2": groupId }
+  doc_ids?: string;             // Comma-separated node IDs to attach
+  attach_documents?: boolean;   // Whether to attach documents
+}
+```
+
+**Agent Use Cases:**
+- "Show me my pending workflow tasks"
+- "What workflows are overdue?"
+- "Start the Document Approval workflow for this contract"
+- "Approve and send on my current task with comment"
+- "Delegate this review task to John"
+- "Show the activity history for workflow 12345"
+- "Stop the workflow for project ABC"
+
+---
+
+## Records Management API Tools
+
+The Records Management API provides enterprise compliance, retention, and governance capabilities. These tools integrate with nodes managed through the Content Server API.
+
+### Category 13: RM Classifications
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_get_rm_classifications` | Get RM classifications on a node | `GET /v1/nodes/{id}/rmclassifications` |
+| `otcs_apply_rm_classification` | Classify a node as a record | `POST /v1/nodes/{id}/rmclassifications` |
+| `otcs_update_rm_classification` | Update record details | `PUT /v1/nodes/{id}/rmclassifications` |
+| `otcs_remove_rm_classification` | Remove RM classification | `DELETE /v1/nodes/{id}/rmclassifications/{class_id}` |
+| `otcs_get_classification_tree` | Browse classification hierarchy | `GET /v2/classificationvolume` |
+| `otcs_get_classified_items` | List items under a classification | `GET /v2/classifieditems/{id}` |
+| `otcs_make_confidential` | Mark record as confidential | `POST /v1/nodes/{id}/rmclassifications/makeConfidential` |
+
+**Agent Use Cases:**
+- "Classify this contract as a legal record"
+- "What retention schedule applies to this document?"
+- "Show all records under the HR classification"
+
+---
+
+### Category 14: Legal & Administrative Holds
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_list_holds` | List all holds in the system | `GET /v2/holds` |
+| `otcs_get_hold` | Get hold details | `GET /v2/holds/{id}` |
+| `otcs_create_hold` | Create a new hold | `POST /v1/holds` |
+| `otcs_update_hold` | Update hold properties | `PUT /v2/holds/{id}` |
+| `otcs_delete_hold` | Delete a hold | `DELETE /v1/holds/{id}` |
+| `otcs_get_node_holds` | Get holds on a document | `GET /v1/nodes/{id}/holds` |
+| `otcs_apply_hold` | Place a hold on a document | `POST /v1/nodes/{id}/holds` |
+| `otcs_release_hold` | Remove hold from document | `DELETE /v1/nodes/{id}/holds/{hold_id}` |
+| `otcs_get_hold_items` | List all items under a hold | `GET /v2/holditems/{id}` |
+
+**Parameters for `otcs_create_hold`:**
+```typescript
+{
+  name: string;                    // Hold name
+  hold_type: string;               // 'Legal' | 'Administrative' | 'Audit'
+  description?: string;
+  start_date?: string;             // ISO date
+  end_date?: string;               // ISO date
+  custodian_id?: number;           // User ID of custodian
+  matter_number?: string;          // Legal matter reference
+}
+```
+
+**Agent Use Cases:**
+- "Place a litigation hold on all Project Alpha documents"
+- "Show all documents under the SEC Investigation hold"
+- "Release the audit hold from these contracts"
+
+---
+
+### Category 15: Dispositions & Retention
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_get_dispositions` | List disposition searches | `GET /v2/dispositionscontainer/{id}` |
+| `otcs_start_disp_search` | Start disposition search on node | `POST /v1/nodes/{id}/startdispsearch` |
+| `otcs_get_disp_queue` | Get disposition queue items | `GET /v1/disposition/{id}/qdate/{qdate}` |
+| `otcs_perform_disp_actions` | Execute disposition actions | `POST /v1/members/{id}/disposition/performactions` |
+| `otcs_change_disp_actions` | Modify pending actions | `POST /v1/members/{id}/disposition/changeactions` |
+| `otcs_finish_disp_review` | Complete disposition review | `POST /v1/members/{id}/disposition/finishreview` |
+| `otcs_get_disp_snapshots` | Get disposition snapshots | `GET /v2/nodes/{id}/disposition-snapshots/qdate/{qdate}` |
+
+**Agent Use Cases:**
+- "What documents are due for disposition this month?"
+- "Process the approved destructions for Q4"
+- "Show the retention schedule for this record"
+
+---
+
+### Category 16: RSI (Record Series Identifiers) & Schedules
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_list_rsis` | List all RSI schedules | `GET /v2/rsis` |
+| `otcs_get_rsi` | Get RSI details | `GET /v2/rsis/{id}` |
+| `otcs_get_rsi_schedules` | Get schedules for an RSI | `GET /v2/rsischedules` |
+| `otcs_get_schedule_details` | Get schedule stage details | `GET /v2/rsischedules/{id}/stages` |
+| `otcs_approve_schedule` | Approve schedule stage | `POST /v2/rsischedules/{id}/approve/{stageId}` |
+| `otcs_get_node_rsis` | Get RSIs assigned to node | `GET /v1/nodes/{id}/rsis` |
+| `otcs_assign_rsi` | Assign RSI to node | `POST /v1/nodes/{id}/rmclassifications/{class_id}/rsis` |
+
+**Agent Use Cases:**
+- "What is the retention period for HR records?"
+- "Show all RSIs pending approval"
+- "Assign the 7-year financial retention to this invoice"
+
+---
+
+### Category 17: Cross-References
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_get_xrefs` | Get cross-references for a node | `GET /v1/nodes/{id}/xrefs` |
+| `otcs_add_xref` | Add cross-reference link | `POST /v1/nodes/{id}/xrefs` |
+| `otcs_remove_xref` | Remove cross-reference | `PUT /v1/nodes/{id}/xrefs` (with uniqueIDList) |
+| `otcs_list_xref_types` | List available xref types | `GET /v1/xrefs` |
+
+**Parameters for `otcs_add_xref`:**
+```typescript
+{
+  node_id: number;                 // Source node
+  xref_type: string;               // 'See Also' | 'Supersedes' | 'Related To' | etc.
+  xref_id: number;                 // Target node ID
+  comment?: string;                // Description of relationship
+}
+```
+
+**Agent Use Cases:**
+- "Link this amendment to the original contract"
+- "Show all documents related to this case file"
+- "This policy supersedes the 2023 version"
+
+---
+
+### Category 18: Security Clearance
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_get_security_clearance` | Get node security level | `GET /v1/nodes/{id}/securityclearances` |
+| `otcs_set_security_clearance` | Set security level | `PUT /v1/nodes/{id}/securityclearances` |
+| `otcs_get_user_clearance` | Get user's clearance level | `GET /v2/members/usersecurity/{userID}/securityclearancelevel` |
+| `otcs_update_user_clearance` | Update user clearance | `POST /v1/UpdateSecurityClearanceLevel` |
+| `otcs_get_clearance_levels` | List available levels | `GET /v1/securityclearances/settings` |
+| `otcs_update_supplemental_markings` | Update markings | `POST /v1/UpdateSupplementalMarkings` |
+
+**Security Levels (typical):**
+- Unclassified
+- Confidential
+- Secret
+- Top Secret
+
+**Agent Use Cases:**
+- "Set this document to Confidential"
+- "What clearance level does John have?"
+- "Add NOFORN marking to these documents"
+
+---
+
+### Category 19: Physical Objects & Circulation
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_get_po_metadata` | Get physical object properties | `GET /v1/pocirculation/pometadata` |
+| `otcs_request_physical_item` | Request a physical item | `POST /v1/nodes/{id}/po_request` |
+| `otcs_borrow_physical_item` | Check out physical item | `POST /v1/nodes/{id}/po_borrow` |
+| `otcs_return_physical_item` | Return physical item | `POST /v1/nodes/{id}/po_return` |
+| `otcs_get_borrowed_items` | List user's borrowed items | `GET /v2/members/borrowed` |
+| `otcs_get_circulation_history` | Get item circulation history | `GET /v2/circulationhistory` |
+| `otcs_flag_for_pickup` | Mark item ready for pickup | `POST /v1/nodes/{id}/po_flagforpickup` |
+| `otcs_pass_item` | Pass item to another user | `POST /v1/nodes/{id}/po_pass` |
+
+**Agent Use Cases:**
+- "Request the original signed contract from the vault"
+- "Who currently has the personnel file checked out?"
+- "Return all physical items I borrowed"
+
+---
+
+### Category 20: Storage Management
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_assign_box` | Assign item to storage box | `POST /v1/assignbox` |
+| `otcs_assign_locator` | Assign storage location | `POST /v1/nodes/{id}/assign_locator` |
+| `otcs_remove_locator` | Remove from location | `DELETE /v1/nodes/{id}/remove_locator` |
+| `otcs_box_transfer` | Transfer box to new location | `POST /v1/boxtransfer` |
+| `otcs_get_box_locators` | List box locations | `GET /v1/boxlocators` |
+| `otcs_generate_labels` | Generate barcode labels | `POST /v1/nodes/{id}/generatelabels` |
+| `otcs_get_labels` | Get existing labels | `GET /v1/nodes/{id}/labels` |
+
+**Agent Use Cases:**
+- "Move Box A-1234 to the offsite storage facility"
+- "Generate barcode labels for these new files"
+- "What's the location of the 2020 tax records?"
+
+---
+
+## Data Models
+
+### NodeInfo (returned by most tools)
+```typescript
+interface NodeInfo {
+  id: number;
+  name: string;
+  type: number;          // 0=folder, 144=document, 848=workspace
+  type_name: string;
+  parent_id: number;
+  path: string[];        // Breadcrumb path
+  description?: string;
+  create_date: string;
+  modify_date: string;
+  size?: number;         // For documents
+  mime_type?: string;    // For documents
+  version?: number;      // Current version
+  permissions: {
+    can_see: boolean;
+    can_modify: boolean;
+    can_delete: boolean;
+    can_add_items: boolean;
+  };
+  metadata?: Record<string, any>;  // Category values
+}
+```
+
+### WorkspaceInfo (extended for workspaces)
+```typescript
+interface WorkspaceInfo extends NodeInfo {
+  workspace_type_id: number;
+  workspace_type_name: string;
+  business_object?: {
+    ext_system_id: string;
+    bo_type: string;
+    bo_id: string;
+  };
+  roles: RoleInfo[];
+  related_count: number;
+}
+```
+
+### SearchResult
+```typescript
+interface SearchResult {
+  total_count: number;
+  page: number;
+  page_size: number;
+  results: NodeInfo[];
+  facets?: Record<string, FacetValue[]>;
+}
+```
+
+---
+
+## Implementation Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MCP Server                                │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
+│  │   Session   │  │   Schema    │  │      Tool Registry       │ │
+│  │   Manager   │  │   Cache     │  │  (40+ tool definitions)  │ │
+│  └──────┬──────┘  └──────┬──────┘  └────────────┬────────────┘ │
+│         │                │                       │               │
+│  ┌──────▼────────────────▼───────────────────────▼─────────────┐│
+│  │                    Tool Handlers                             ││
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────┐││
+│  │  │  Navigation │ │  Document   │ │  Workspace Management   │││
+│  │  │   Tools     │ │  Operations │ │                         │││
+│  │  └─────────────┘ └─────────────┘ └─────────────────────────┘││
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────┐││
+│  │  │   Search    │ │  Metadata   │ │  Composite Operations   │││
+│  │  │   Tools     │ │  Tools      │ │                         │││
+│  │  └─────────────┘ └─────────────┘ └─────────────────────────┘││
+│  └──────────────────────────┬──────────────────────────────────┘│
+│                             │                                    │
+│  ┌──────────────────────────▼──────────────────────────────────┐│
+│  │                   OTCS API Client                            ││
+│  │  - Request/Response handling                                 ││
+│  │  - Authentication header injection                           ││
+│  │  - Error transformation                                      ││
+│  │  - Rate limiting                                             ││
+│  └──────────────────────────┬──────────────────────────────────┘│
+└─────────────────────────────┼───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                OpenText Content Server                          │
+│         (REST API v1/v2 + Business Workspaces API)              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Configuration
+
+```typescript
+interface OTCSConfig {
+  baseUrl: string;              // e.g., "https://cs.example.com/api"
+
+  // Authentication options
+  auth: {
+    method: 'basic' | 'ticket' | 'oauth';
+    username?: string;
+    password?: string;
+    domain?: string;
+    ticket?: string;
+  };
+
+  // Behavior options
+  options: {
+    defaultPageSize: number;    // Default: 100
+    maxRetries: number;         // Default: 3
+    cacheSchemas: boolean;      // Default: true
+    includePermissions: boolean; // Include perms in responses
+  };
+}
+```
+
+---
+
+## Example Agent Workflows
+
+### Workflow 1: Create and Populate a Project Workspace
+
+```
+Agent: "Create a new project workspace for Project Phoenix and upload the project charter"
+
+1. otcs_get_workspace_types()
+   → Find "Project" workspace type ID
+
+2. otcs_get_workspace_form(template_id=<project_type_id>)
+   → Get required fields schema
+
+3. otcs_create_workspace({
+     template_id: <id>,
+     name: "Project Phoenix",
+     roles: { categories: { <project_cat>: { status: "Active" }}}
+   })
+   → Returns workspace_id
+
+4. otcs_upload_document({
+     parent_id: <workspace_id>,
+     name: "Project Charter.docx",
+     file: <file_data>,
+     categories: { document_type: "Charter" }
+   })
+   → Document created
+```
+
+### Workflow 2: Find and Update Contract Metadata
+
+```
+Agent: "Find all contracts expiring in Q1 and extend their expiration dates by 6 months"
+
+1. otcs_search_workspaces({
+     where_workspace_type_name: "Contract",
+     where_column_query: "expiration_date < 2024-04-01 AND expiration_date >= 2024-01-01"
+   })
+   → List of matching contracts
+
+2. For each contract:
+   otcs_update_category({
+     node_id: <contract_id>,
+     category_id: <contract_cat>,
+     values: { expiration_date: <new_date> }
+   })
+```
+
+### Workflow 3: Summarize Workspace for Reporting
+
+```
+Agent: "Give me a summary of the Acme Corp customer workspace"
+
+1. otcs_search_workspaces({ where_name: "contains_Acme Corp" })
+   → Find workspace ID
+
+2. otcs_summarize_workspace(workspace_id)
+   → Returns:
+   {
+     workspace: { name, type, created, modified },
+     team: { roles: [...], member_count: 12 },
+     related: { projects: 3, contracts: 5 },
+     recent_activity: [...last 10 documents],
+     statistics: { total_docs: 156, pending_tasks: 4 }
+   }
+```
+
+---
+
+## Implementation Phases
+
+### Phase 1: Foundation ✅
+- Authentication tools
+- Basic navigation (browse, get_node)
+- Simple search
+- Create folder/upload document
+- Version management
+
+### Phase 2: Business Workspaces ✅
+- Workspace CRUD
+- Workspace search
+- Related items
+- Role management
+
+### Phase 3: Workflow & Assignments ✅
+- Get user assignments (pending tasks)
+- Workflow status queries (pending, late, active)
+- Workflow initiation and draft processes
+- Task actions (SendOn, Delegate, SendForReview)
+- Workflow status changes (suspend, resume, stop, archive)
+- Workflow activity history
+
+### Phase 4: Metadata & Categories
+- Category operations
+- Form schema retrieval
+- Metadata updates
+- Bulk operations
+
+### Phase 5: Permissions & Advanced Features
+- Permission management
+- Composite operations
+- Large file uploads
+- Document reservations
+
+### Phase 6: Records Management - Core
+- RM Classifications (declare records, update record details)
+- Legal & Administrative Holds
+- Cross-References
+- Security Clearance
+
+### Phase 7: Records Management - Advanced
+- RSI Schedules management
+- Disposition processing
+- Physical Objects & Circulation
+- Storage Management (boxes, locators, labels)
+
+### Phase 8: Intelligence Layer
+- Smart filing recommendations with RM classification
+- Compliance reporting
+- Retention policy suggestions
+- Activity summarization
+
+---
+
+## Technical Considerations
+
+### Error Handling Strategy
+```typescript
+// Transform OTCS errors into actionable guidance
+class OTCSError extends Error {
+  code: string;
+  suggestion: string;
+
+  static fromResponse(response: OTCSResponse): OTCSError {
+    // Map common errors to helpful suggestions
+    if (response.status === 404) {
+      return new OTCSError(
+        "Node not found",
+        "NOT_FOUND",
+        "The item may have been deleted or moved. Try searching by name."
+      );
+    }
+    // ... more mappings
+  }
+}
+```
+
+### Caching Strategy
+- Cache workspace type definitions (changes rarely)
+- Cache category schemas (changes rarely)
+- Cache user permissions per session
+- Don't cache node content (changes frequently)
+
+### Rate Limiting
+- Implement request queuing
+- Respect server throttling headers
+- Batch requests where possible
+
+---
+
+## File Structure
+
+```
+otcs-mcp/
+├── src/
+│   ├── index.ts                 # MCP server entry point
+│   ├── config.ts                # Configuration handling
+│   ├── types.ts                 # TypeScript type definitions
+│   ├── client/
+│   │   ├── otcs-client.ts       # Core API client (CS + BW APIs)
+│   │   ├── rm-client.ts         # Records Management API client
+│   │   ├── auth.ts              # Authentication handling
+│   │   └── errors.ts            # Error transformation
+│   ├── tools/
+│   │   ├── index.ts             # Tool registry
+│   │   ├── auth.tools.ts        # Authentication tools
+│   │   ├── navigation.tools.ts  # Browse/navigate tools
+│   │   ├── search.tools.ts      # Search tools
+│   │   ├── document.tools.ts    # Document operations
+│   │   ├── version.tools.ts     # Version management
+│   │   ├── workspace.tools.ts   # Workspace management
+│   │   ├── workflow.tools.ts    # Workflow & assignments tools
+│   │   ├── metadata.tools.ts    # Category/metadata tools
+│   │   ├── permission.tools.ts  # Permission tools
+│   │   ├── rm-classification.tools.ts  # RM classification tools
+│   │   ├── rm-holds.tools.ts    # Legal/admin holds tools
+│   │   ├── rm-disposition.tools.ts     # Disposition tools
+│   │   ├── rm-physical.tools.ts # Physical objects tools
+│   │   └── composite.tools.ts   # High-level operations
+│   ├── schemas/
+│   │   ├── node.schema.ts       # Node type definitions
+│   │   ├── workspace.schema.ts  # Workspace schemas
+│   │   ├── workflow.schema.ts   # Workflow & assignment schemas
+│   │   ├── category.schema.ts   # Category schemas
+│   │   └── rm.schema.ts         # Records management schemas
+│   └── utils/
+│       ├── cache.ts             # Schema caching
+│       └── transform.ts         # Response transformations
+├── package.json
+├── tsconfig.json
+├── ARCHITECTURE_PLAN.md         # This document
+└── README.md
+```
+
+---
+
+## Next Steps
+
+1. **Confirm scope** - Which tool categories are highest priority?
+2. **Environment setup** - Get test Content Server credentials
+3. **Begin Phase 1** - Implement foundation tools
+4. **Iterate** - Test with real agent workflows and refine
+
+This architecture provides a solid foundation for building an intelligent document management agent that can reason about and operate on OpenText Content Server effectively.
