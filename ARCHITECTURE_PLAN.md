@@ -35,8 +35,8 @@ Users can select a tool profile via `OTCS_TOOL_PROFILE` environment variable:
 | Profile | Tools | Use Case |
 |---------|-------|----------|
 | `core` | 18 | Basic document management |
-| `workflow` | 26 | Document management + full workflow support |
-| `admin` | 24 | Document management + permissions/admin tools |
+| `workflow` | 27 | Document management + full workflow support |
+| `admin` | 25 | Document management + permissions/admin tools |
 | `full` | 33 | All tools (default) |
 
 ---
@@ -910,7 +910,7 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 - Workflow status changes (suspend, resume, stop, archive)
 - Workflow activity history
 
-### Phase 3a: Workflow Forms & Attributes 🚧
+### Phase 3a: Workflow Forms & Attributes ✅ Complete
 - Get workflow task form schema (Alpaca forms)
 - Get draft workflow form schema
 - Update draft workflow form values (formUpdate action)
@@ -919,19 +919,20 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 - Workflow form field name convention support
 - Multi-value and set attribute handling
 
-### Phase 4: Metadata & Categories
-- Category operations
-- Form schema retrieval
-- Metadata updates
-- Bulk operations
+### Phase 4: Metadata & Categories ✅ Complete
+- Category operations (list, get, add, update, remove)
+- Form schema retrieval (get_form action)
+- Workspace metadata/business properties updates
+- Consolidated into `otcs_categories` and `otcs_workspace_metadata` tools
 
 ### Phase 5: Permissions & User Management ✅ Complete
 - Members (Users & Groups) operations: search, get, group membership
 - Permission management: get, add, update, remove permissions
 - Effective permissions for users on nodes
 - Owner and public access permission updates
+- Consolidated into `otcs_members`, `otcs_group_membership`, and `otcs_permissions` tools
 
-**Tools Implemented:** 13 tools (6 member tools + 7 permission tools)
+**Tools Implemented:** 3 consolidated tools (previously 13 individual tools)
 
 ### Phase 6: Records Management - Core
 - RM Classifications (declare records, update record details)

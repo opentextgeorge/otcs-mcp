@@ -26,8 +26,8 @@ To optimize for different AI clients, you can select a tool profile:
 | Profile | Tools | Use Case |
 |---------|-------|----------|
 | `core` | 18 | Basic document management |
-| `workflow` | 26 | Document management + full workflow |
-| `admin` | 24 | Document management + permissions/admin |
+| `workflow` | 27 | Document management + full workflow |
+| `admin` | 25 | Document management + permissions/admin |
 | `full` | 33 | All tools (default) |
 
 Configure via environment variable:
@@ -89,7 +89,7 @@ OTCS_TOOL_PROFILE=core  # or workflow, admin, full
 | `otcs_workspace_relations` | `list`, `add`, `remove` | Manage workspace relationships |
 | `otcs_workspace_roles` | `get_roles`, `get_members`, `get_role_members`, `add_member`, `remove_member` | Manage workspace roles |
 
-### Workflows (10 tools)
+### Workflows (11 tools)
 
 | Tool | Description |
 |------|-------------|
