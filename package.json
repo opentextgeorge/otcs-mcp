@@ -10,7 +10,8 @@
     "dev": "tsx src/index.ts",
     "test": "tsx tests/test.ts",
     "test:workflows": "tsx tests/test-workflows.ts",
-    "test:workspaces": "tsx tests/test-workspaces.ts"
+    "test:workspaces": "tsx tests/test-workspaces.ts",
+    "test:rm": "tsx tests/test-rm.ts"
   },
   "keywords": [
     "mcp",

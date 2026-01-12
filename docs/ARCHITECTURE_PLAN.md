@@ -1113,7 +1113,8 @@ otcs-mcp/
 ├── tests/
 │   ├── test.ts               # Main API connectivity tests
 │   ├── test-workflows.ts     # Workflow-specific tests
-│   └── test-workspaces.ts    # Workspace-specific tests
+│   ├── test-workspaces.ts    # Workspace-specific tests
+│   └── test-rm.ts            # Records Management tests (holds, classifications, xrefs)
 ├── docs/
 │   ├── ARCHITECTURE_PLAN.md                              # This document
 │   ├── content-server-rest-api-2.0.2.yaml                # Content Server REST API spec
@@ -1136,11 +1137,11 @@ Records Management API methods have been integrated directly into `otcs-client.t
 ### Completed
 - ✅ Phases 1-5: Foundation, Workspaces, Workflows, Metadata, Permissions (33 tools)
 - ✅ Phase 6: Records Management Core - Classifications, Holds, Cross-References (3 tools)
+- ✅ RM Holds API tested and verified against live RM environment (create, apply, remove, delete holds)
 
 ### Up Next
 1. **Phase 7: RM Advanced** - RSI schedules and disposition processing (2 tools)
 2. **Phase 8: Enhanced Features** - Favorites, reminders, notifications, recycle bin (4 tools)
-3. **Testing** - Test RM tools against live Records Management environment
-4. **Iterate** - Refine based on real agent workflows
+3. **Iterate** - Refine based on real agent workflows
 
 This architecture provides a solid foundation for building an intelligent document management agent that can reason about and operate on OpenText Content Server effectively.

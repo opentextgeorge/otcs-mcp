@@ -339,6 +339,7 @@ Tool: otcs_rm_xref(action="apply", node_id=12345, target_node_id=67890, type_nam
 npm test              # Run main API connectivity tests
 npm run test:workflows   # Run workflow-specific tests
 npm run test:workspaces  # Run workspace-specific tests
+npm run test:rm          # Run Records Management tests
 npm run dev           # Development mode with auto-reload
 ```
 
@@ -354,7 +355,8 @@ otcs-mcp/
 ├── tests/
 │   ├── test.ts               # Main API connectivity tests
 │   ├── test-workflows.ts     # Workflow-specific tests
-│   └── test-workspaces.ts    # Workspace-specific tests
+│   ├── test-workspaces.ts    # Workspace-specific tests
+│   └── test-rm.ts            # Records Management tests
 ├── docs/
 │   ├── ARCHITECTURE_PLAN.md                              # Detailed architecture and roadmap
 │   ├── content-server-rest-api-2.0.2.yaml                # Content Server REST API spec
