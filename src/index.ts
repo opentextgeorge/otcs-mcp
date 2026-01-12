@@ -9,6 +9,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { OTCSClient } from './client/otcs-client.js';
 import { NodeTypes, NodeInfo, FolderContents } from './types.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Initialize OTCS client with environment configuration
 const config = {
@@ -285,6 +287,32 @@ const tools: Tool[] = [
         },
       },
       required: ['parent_id', 'name', 'content_base64', 'mime_type'],
+    },
+  },
+  {
+    name: 'otcs_upload_file',
+    description: 'Upload a file from the local filesystem to OpenText Content Server. This is the preferred method when you have a file path. The MIME type is auto-detected from the file extension.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        parent_id: {
+          type: 'number',
+          description: 'ID of the folder to upload to',
+        },
+        file_path: {
+          type: 'string',
+          description: 'Full path to the local file to upload (e.g., "/Users/john/Documents/report.pdf")',
+        },
+        name: {
+          type: 'string',
+          description: 'Optional: Name for the document in OTCS. If not provided, uses the original filename.',
+        },
+        description: {
+          type: 'string',
+          description: 'Optional description for the document',
+        },
+      },
+      required: ['parent_id', 'file_path'],
     },
   },
   {
@@ -1066,6 +1094,35 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
       };
     }
 
+    case 'otcs_upload_file': {
+      const { parent_id, file_path: filePath, name, description } = args as {
+        parent_id: number;
+        file_path: string;
+        name?: string;
+        description?: string;
+      };
+
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+
+      // Read file from disk
+      const fileBuffer = fs.readFileSync(filePath);
+      const fileName = name || path.basename(filePath);
+      const mimeType = getMimeType(filePath);
+
+      const result = await client.uploadDocument(parent_id, fileName, fileBuffer, mimeType, description);
+
+      return {
+        success: true,
+        document: result,
+        message: `File "${fileName}" uploaded with ID ${result.id}`,
+        source_path: filePath,
+        size_bytes: fileBuffer.length,
+      };
+    }
+
     case 'otcs_download_content': {
       const { node_id } = args as { node_id: number };
       const { content, mimeType, fileName } = await client.getContent(node_id);
@@ -1569,6 +1626,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 });
+
+// MIME type detection from file extension
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    // Documents
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.odt': 'application/vnd.oasis.opendocument.text',
+    '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+    '.odp': 'application/vnd.oasis.opendocument.presentation',
+    '.rtf': 'application/rtf',
+    // Text
+    '.txt': 'text/plain',
+    '.csv': 'text/csv',
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.xml': 'application/xml',
+    '.json': 'application/json',
+    '.md': 'text/markdown',
+    // Images
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml',
+    '.webp': 'image/webp',
+    '.tiff': 'image/tiff',
+    '.tif': 'image/tiff',
+    // Archives
+    '.zip': 'application/zip',
+    '.rar': 'application/vnd.rar',
+    '.7z': 'application/x-7z-compressed',
+    '.tar': 'application/x-tar',
+    '.gz': 'application/gzip',
+    // Media
+    '.mp3': 'audio/mpeg',
+    '.mp4': 'video/mp4',
+    '.avi': 'video/x-msvideo',
+    '.mov': 'video/quicktime',
+    '.wav': 'audio/wav',
+    // Other
+    '.eml': 'message/rfc822',
+    '.msg': 'application/vnd.ms-outlook',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
 
 // Error suggestions for common issues
 function getSuggestion(error: string): string {
