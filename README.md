@@ -16,10 +16,11 @@ An MCP (Model Context Protocol) server for OpenText Content Server that enables 
 | 4. Metadata | ✅ Complete | Categories, forms, workspace properties |
 | 5. Permissions & Users | ✅ Complete | Members, groups, ACL management |
 | 6. RM Core | ✅ Complete | Classifications, holds, cross-references |
-| 7. RM Advanced | Planned | RSI schedules, disposition processing |
-| 8. Enhanced Features | Planned | Favorites, reminders, notifications, recycle bin |
+| 7. RM RSI | ✅ Complete | RSI retention schedules |
+| 8. RM Advanced | Planned | Disposition processing |
+| 9. Enhanced Features | Planned | Favorites, reminders, notifications, recycle bin |
 
-**Current: 36 tools** | **Projected: 42 tools** (consolidated for AI agent performance)
+**Current: 37 tools** | **Projected: 42 tools** (consolidated for AI agent performance)
 
 ## Tool Profiles
 
@@ -29,9 +30,9 @@ To optimize for different AI clients, you can select a tool profile:
 |---------|-------|----------|
 | `core` | 18 | Basic document management |
 | `workflow` | 27 | Document management + full workflow |
-| `admin` | 28 | Document management + permissions/admin + RM |
-| `rm` | 18 | Document management + Records Management |
-| `full` | 36 | All tools (default) |
+| `admin` | 29 | Document management + permissions/admin + RM |
+| `rm` | 19 | Document management + Records Management |
+| `full` | 37 | All tools (default) |
 
 Configure via environment variable:
 ```bash
@@ -132,13 +133,14 @@ OTCS_TOOL_PROFILE=core  # or workflow, admin, rm, full
 
 **Apply-to scope:** `0`=This Item, `1`=Sub-Items, `2`=Both, `3`=Immediate Children
 
-### Records Management (3 tools)
+### Records Management (4 tools)
 
 | Tool | Actions | Description |
 |------|---------|-------------|
 | `otcs_rm_classification` | `browse_tree`, `get_node_classifications`, `declare`, `undeclare`, `update_details`, `make_confidential`, `remove_confidential`, `finalize` | Manage record classifications |
 | `otcs_rm_holds` | `list_holds`, `get_hold`, `create_hold`, `update_hold`, `delete_hold`, `get_node_holds`, `apply_hold`, `remove_hold`, `apply_batch`, `remove_batch`, `get_hold_items`, `get_hold_users`, `add_hold_users`, `remove_hold_users` | Legal/administrative holds |
 | `otcs_rm_xref` | `list_types`, `get_type`, `create_type`, `delete_type`, `get_node_xrefs`, `apply`, `remove`, `apply_batch`, `remove_batch` | Cross-references between records |
+| `otcs_rm_rsi` | `list`, `get`, `create`, `update`, `delete`, `get_node_rsis`, `assign`, `remove`, `get_items`, `get_schedules`, `create_schedule`, `approve_schedule`, `get_approval_history` | RSI retention schedules |
 
 ## Installation
 
@@ -334,6 +336,15 @@ Tool: otcs_rm_holds(action="apply_hold", hold_id=100, node_id=12345)
 
 Agent: Create a cross-reference between records
 Tool: otcs_rm_xref(action="apply", node_id=12345, target_node_id=67890, type_name="Related To")
+
+Agent: List all RSI retention schedules
+Tool: otcs_rm_rsi(action="list")
+
+Agent: Get RSI details with schedules
+Tool: otcs_rm_rsi(action="get", rsi_id=100)
+
+Agent: Assign an RSI to a classified record
+Tool: otcs_rm_rsi(action="assign", node_id=12345, class_id=5001, rsi_id=100)
 ```
 
 ## Development
@@ -358,16 +369,17 @@ npm run test:rm
 ```
 
 **RM Test Coverage:**
-- Classifications: declare, update_details, undeclare (28 tests, all passing)
+- Classifications: declare, update_details, undeclare
 - Holds: create, apply, get, remove, delete
 - Cross-references: list_types, apply, get, remove
+- RSI: list, create, get, update, get_schedules, create_schedule, get_items, delete
 
 ## Architecture
 
 ```
 otcs-mcp/
 ├── src/
-│   ├── index.ts              # MCP server entry point (36 consolidated tools)
+│   ├── index.ts              # MCP server entry point (37 consolidated tools)
 │   ├── types.ts              # TypeScript type definitions
 │   └── client/
 │       └── otcs-client.ts    # OTCS REST API client

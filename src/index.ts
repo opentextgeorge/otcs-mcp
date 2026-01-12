@@ -61,7 +61,7 @@ const TOOL_PROFILES: Record<string, string[]> = {
     'otcs_get_assignments', 'otcs_workflow_form', 'otcs_workflow_task',
     'otcs_members', 'otcs_group_membership',
     'otcs_permissions', 'otcs_categories', 'otcs_workspace_metadata',
-    'otcs_rm_classification', 'otcs_rm_holds', 'otcs_rm_xref',
+    'otcs_rm_classification', 'otcs_rm_holds', 'otcs_rm_xref', 'otcs_rm_rsi',
   ],
   rm: [
     // Core tools plus Records Management
@@ -72,7 +72,7 @@ const TOOL_PROFILES: Record<string, string[]> = {
     'otcs_versions',
     'otcs_search_workspaces', 'otcs_get_workspace',
     'otcs_members', 'otcs_permissions', 'otcs_categories',
-    'otcs_rm_classification', 'otcs_rm_holds', 'otcs_rm_xref',
+    'otcs_rm_classification', 'otcs_rm_holds', 'otcs_rm_xref', 'otcs_rm_rsi',
   ],
 };
 
@@ -618,6 +618,47 @@ const allTools: Tool[] = [
         target_node_ids: { type: 'array', items: { type: 'number' }, description: 'Target node IDs (for batch operations)' },
         name: { type: 'string', description: 'Type name (for create_type)' },
         reciprocal_name: { type: 'string', description: 'Reciprocal type name (for create_type)' },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'otcs_rm_rsi',
+    description: 'Manage RSI (Record Series Identifier) retention schedules. Actions: list (all RSIs), get (RSI details with schedules), create (new RSI), update (RSI metadata), delete, get_node_rsis (RSIs on a node), assign (RSI to classified node), remove (RSI from node), get_items (items with RSI), get_schedules (RSI schedule stages), create_schedule (new retention stage), approve_schedule, get_approval_history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'get', 'create', 'update', 'delete', 'get_node_rsis', 'assign', 'remove', 'get_items', 'get_schedules', 'create_schedule', 'approve_schedule', 'get_approval_history'], description: 'Action to perform' },
+        rsi_id: { type: 'number', description: 'RSI ID (for get/update/delete/get_items/get_schedules/create_schedule/approve_schedule/get_approval_history)' },
+        node_id: { type: 'number', description: 'Node ID (for get_node_rsis/assign/remove)' },
+        class_id: { type: 'number', description: 'Classification ID (for assign/remove - node must be classified)' },
+        stage_id: { type: 'number', description: 'Schedule stage ID (for approve_schedule)' },
+        // RSI create/update params
+        name: { type: 'string', description: 'RSI name (for create/update)' },
+        new_name: { type: 'string', description: 'New RSI name (for update/rename)' },
+        status: { type: 'string', description: 'RSI status (for create/update)' },
+        status_date: { type: 'string', description: 'Status date yyyy-mm-dd (for create/update/assign)' },
+        description: { type: 'string', description: 'RSI description (for create/update)' },
+        subject: { type: 'string', description: 'RSI subject (for create/update)' },
+        title: { type: 'string', description: 'RSI title (for create/update)' },
+        disp_control: { type: 'boolean', description: 'Under disposition control (for create/update)' },
+        discontinue: { type: 'boolean', description: 'Discontinue RSI (for update)' },
+        discontinue_date: { type: 'string', description: 'Discontinue date (for update)' },
+        discontinue_comment: { type: 'string', description: 'Discontinue comment (for update)' },
+        // Schedule create params
+        stage: { type: 'string', description: 'Retention stage name (for create_schedule)' },
+        object_type: { type: 'string', enum: ['LIV', 'LRM'], description: 'LIV=Classified Objects, LRM=RM Classifications (for create_schedule)' },
+        event_type: { type: 'number', description: '1=Calculated Date, 2=Calendar, 3=Event Based, 4=Fixed Date, 5=Permanent (for create_schedule)' },
+        date_to_use: { type: 'number', description: '91=Create, 92=Reserved, 93=Modify, 94=Status, 95=Record date (for create_schedule)' },
+        retention_years: { type: 'number', description: 'Years to retain (for create_schedule)' },
+        retention_months: { type: 'number', description: 'Months to retain (for create_schedule)' },
+        retention_days: { type: 'number', description: 'Days to retain (for create_schedule)' },
+        action_code: { type: 'number', description: '0=None, 1=Change Status, 7=Close, 8=Finalize, 9=Mark Official, 32=Destroy (for create_schedule)' },
+        disposition: { type: 'string', description: 'Disposition action (for create_schedule)' },
+        comment: { type: 'string', description: 'Approval comment (for approve_schedule)' },
+        // Pagination
+        page: { type: 'number', description: 'Page number (for list/get_items)' },
+        limit: { type: 'number', description: 'Results per page (for list/get_items)' },
       },
       required: ['action'],
     },
@@ -1304,6 +1345,87 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
           if (node_ids.length !== target_node_ids.length) throw new Error('node_ids and target_node_ids must have same length');
           const removeBatchResult = await client.removeRMCrossRefBatch(node_ids, type_name, target_node_ids[0]);
           return { success: true, result: removeBatchResult, message: `${node_ids.length} cross-reference(s) removed` };
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+    }
+
+    case 'otcs_rm_rsi': {
+      const {
+        action, rsi_id, node_id, class_id, stage_id,
+        name, new_name, status, status_date, description, subject, title,
+        disp_control, discontinue, discontinue_date, discontinue_comment,
+        stage, object_type, event_type, date_to_use,
+        retention_years, retention_months, retention_days,
+        action_code, disposition, comment,
+        page, limit
+      } = args as {
+        action: string; rsi_id?: number; node_id?: number; class_id?: number; stage_id?: number;
+        name?: string; new_name?: string; status?: string; status_date?: string;
+        description?: string; subject?: string; title?: string;
+        disp_control?: boolean; discontinue?: boolean; discontinue_date?: string; discontinue_comment?: string;
+        stage?: string; object_type?: 'LIV' | 'LRM'; event_type?: number; date_to_use?: number;
+        retention_years?: number; retention_months?: number; retention_days?: number;
+        action_code?: number; disposition?: string; comment?: string;
+        page?: number; limit?: number;
+      };
+
+      switch (action) {
+        case 'list':
+          const listResult = await client.listRMRSIs({ page, limit });
+          return { rsis: listResult.rsis, count: listResult.rsis.length, total_count: listResult.total_count, message: `Found ${listResult.total_count} RSI(s)` };
+        case 'get':
+          if (!rsi_id) throw new Error('rsi_id required');
+          const rsi = await client.getRMRSI(rsi_id);
+          return { rsi, schedule_count: rsi.schedules?.length || 0, message: `Retrieved RSI "${rsi.name}"` };
+        case 'create':
+          if (!name || !status) throw new Error('name and status required');
+          const newRsi = await client.createRMRSI({ name, status, status_date, description, subject, title, disp_control });
+          return { success: true, rsi: newRsi, message: `RSI "${name}" created with ID ${newRsi.id}` };
+        case 'update':
+          if (!rsi_id) throw new Error('rsi_id required');
+          const updatedRsi = await client.updateRMRSI(rsi_id, { new_name, status, status_date, description, subject, title, disp_control, discontinue, discontinue_date, discontinue_comment });
+          return { success: true, rsi: updatedRsi, message: `RSI ${rsi_id} updated` };
+        case 'delete':
+          if (!rsi_id) throw new Error('rsi_id required');
+          await client.deleteRMRSI(rsi_id);
+          return { success: true, message: `RSI ${rsi_id} deleted` };
+        case 'get_node_rsis':
+          if (!node_id) throw new Error('node_id required');
+          const nodeRsisResult = await client.getNodeRMRSIs(node_id);
+          return { node_id, rsis: nodeRsisResult.rsis, count: nodeRsisResult.rsis.length, message: `Node ${node_id} has ${nodeRsisResult.rsis.length} RSI(s) assigned` };
+        case 'assign':
+          if (!node_id || !class_id || !rsi_id) throw new Error('node_id, class_id, and rsi_id required');
+          await client.assignRMRSI({ node_id, class_id, rsi_id, status_date });
+          return { success: true, message: `RSI ${rsi_id} assigned to node ${node_id} under classification ${class_id}` };
+        case 'remove':
+          if (!node_id || !class_id) throw new Error('node_id and class_id required');
+          await client.removeRMRSI(node_id, class_id);
+          return { success: true, message: `RSI removed from node ${node_id}` };
+        case 'get_items':
+          if (!rsi_id) throw new Error('rsi_id required');
+          const itemsResult = await client.getRMRSIItems(rsi_id, { page, limit });
+          return { rsi_id, items: itemsResult.items, count: itemsResult.items.length, total_count: itemsResult.total_count, message: `RSI ${rsi_id} has ${itemsResult.total_count} item(s)` };
+        case 'get_schedules':
+          if (!rsi_id) throw new Error('rsi_id required');
+          const schedules = await client.getRMRSISchedules(rsi_id);
+          return { rsi_id, schedules, count: schedules.length, message: `RSI ${rsi_id} has ${schedules.length} schedule stage(s)` };
+        case 'create_schedule':
+          if (!rsi_id || !stage || !object_type || event_type === undefined) throw new Error('rsi_id, stage, object_type, and event_type required');
+          const newSchedule = await client.createRMRSISchedule({
+            rsi_id, stage, object_type, event_type, date_to_use,
+            retention_years, retention_months, retention_days,
+            action_code, disposition, description
+          });
+          return { success: true, schedule: newSchedule, message: `Schedule stage "${stage}" created for RSI ${rsi_id}` };
+        case 'approve_schedule':
+          if (!rsi_id || !stage_id) throw new Error('rsi_id and stage_id required');
+          await client.approveRMRSISchedule(rsi_id, stage_id, comment);
+          return { success: true, message: `Schedule stage ${stage_id} approved for RSI ${rsi_id}` };
+        case 'get_approval_history':
+          if (!rsi_id) throw new Error('rsi_id required');
+          const history = await client.getRMRSIApprovalHistory(rsi_id);
+          return { rsi_id, history, count: history.length, message: `RSI ${rsi_id} has ${history.length} approval(s)` };
         default:
           throw new Error(`Unknown action: ${action}`);
       }

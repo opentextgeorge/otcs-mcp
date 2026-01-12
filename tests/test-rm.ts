@@ -6,6 +6,7 @@
  * - Classifications: declare, get, update_details, make_confidential, remove_confidential, undeclare
  * - Holds: list, create, apply, get_node_holds, remove, delete
  * - Cross-references: list_types, apply, get_node_xrefs, remove
+ * - RSI: list, create, get, update, get_schedules, create_schedule, get_items, delete
  */
 
 // Allow self-signed certificates for testing
@@ -414,6 +415,250 @@ async function testRM() {
       }
     }
   }
+  console.log('');
+
+  // ========================================
+  // Section 4: RSI (Record Series Identifiers)
+  // ========================================
+  console.log('--- Section 4: RSI (Record Series Identifiers) ---');
+
+  // 4.0 Get valid RSI status codes
+  let validRsiStatus: string | null = null;
+  try {
+    const rsiStatuses = await client.getRMCodes('rsi_status');
+    logResult(`get RM codes (rsi_status): Found ${rsiStatuses.length} status code(s)`, 'pass');
+    for (const status of rsiStatuses.slice(0, 5)) {
+      console.log(`    - ${status.code}: ${status.description || '(no description)'}`);
+    }
+    if (rsiStatuses.length > 0) {
+      validRsiStatus = rsiStatuses[0].code;
+    }
+  } catch (err: any) {
+    // Try common default codes if we can't get the list
+    console.log(`  Could not get RSI status codes: ${err.message}`);
+    console.log('  Will try common default codes...');
+    validRsiStatus = 'A'; // Common default for Active
+    logResult('get RM codes', 'skip', 'Using default code "A"');
+  }
+
+  // 4.1 List RSIs
+  let existingRsiCount = 0;
+  try {
+    const rsisResult = await client.listRMRSIs();
+    existingRsiCount = rsisResult.rsis.length;
+    logResult(`list RSIs: Found ${rsisResult.rsis.length} RSI(s)`, 'pass');
+    for (const rsi of rsisResult.rsis.slice(0, 3)) {
+      console.log(`    - ${rsi.name} (ID: ${rsi.id}, Status: ${rsi.status})`);
+    }
+  } catch (err: any) {
+    logResult('list RSIs', 'fail', err.message);
+  }
+
+  // 4.2-4.9 RSI lifecycle
+  let testRsiId: number | null = null;
+  if (!validRsiStatus) {
+    console.log('  ○ Skipping RSI create/update tests (no valid status codes available)');
+    logResult('create RSI', 'skip', 'No valid status codes');
+    logResult('get RSI', 'skip', 'No valid status codes');
+    logResult('update RSI', 'skip', 'No valid status codes');
+    logResult('delete RSI', 'skip', 'No valid status codes');
+  } else {
+  try {
+    // Create RSI
+    console.log(`  Creating test RSI with status "${validRsiStatus}"...`);
+    const testRsiName = `Test_RSI_${Date.now()}`;
+    const newRsi = await client.createRMRSI({
+      name: testRsiName,
+      status: validRsiStatus,
+      description: 'Test RSI created by MCP RM tools test',
+      subject: 'Testing',
+      title: 'MCP Test RSI'
+    });
+    testRsiId = newRsi.id;
+    logResult(`create RSI: ${newRsi.name} (ID: ${newRsi.id})`, 'pass');
+
+    // Get RSI details
+    try {
+      const rsiDetails = await client.getRMRSI(newRsi.id);
+      logResult(`get RSI: ${rsiDetails.name} (Status: ${rsiDetails.status})`, 'pass');
+      console.log(`    - Description: ${rsiDetails.description || '(none)'}`);
+      console.log(`    - Subject: ${rsiDetails.subject || '(none)'}`);
+      console.log(`    - Schedules: ${rsiDetails.schedules?.length || 0}`);
+    } catch (err: any) {
+      logResult('get RSI', 'fail', err.message);
+    }
+
+    // Update RSI
+    try {
+      console.log('  Updating RSI...');
+      const updatedRsi = await client.updateRMRSI(newRsi.id, {
+        description: 'Updated description from test',
+        subject: 'Updated Testing'
+      });
+      logResult(`update RSI: Description updated`, 'pass');
+    } catch (err: any) {
+      logResult('update RSI', 'fail', err.message);
+    }
+
+    // Get RSI schedules (should be empty initially)
+    try {
+      const schedules = await client.getRMRSISchedules(newRsi.id);
+      logResult(`get_schedules: Found ${schedules.length} schedule(s)`, 'pass');
+    } catch (err: any) {
+      logResult('get_schedules', 'fail', err.message);
+    }
+
+    // Create RSI schedule
+    let testScheduleId: number | null = null;
+    try {
+      console.log('  Creating RSI schedule stage...');
+      const newSchedule = await client.createRMRSISchedule({
+        rsi_id: newRsi.id,
+        stage: 'Active',
+        object_type: 'LIV',
+        event_type: 1, // Calculated Date
+        date_to_use: 91, // Create Date
+        retention_years: 7,
+        retention_months: 0,
+        retention_days: 0,
+        action_code: 32, // Destroy
+        description: 'Test retention schedule - 7 years then destroy'
+      });
+      testScheduleId = newSchedule.id;
+      logResult(`create_schedule: Stage "${newSchedule.stage}" (ID: ${newSchedule.id})`, 'pass');
+      console.log(`    - Event Type: ${newSchedule.event_type}`);
+      console.log(`    - Retention: ${newSchedule.retention_years}y ${newSchedule.retention_months}m ${newSchedule.retention_days}d`);
+      console.log(`    - Action: ${newSchedule.action_code}`);
+    } catch (err: any) {
+      // Schedule creation may require specific permissions or setup
+      if (err.message.includes('permission') || err.message.includes('not allowed')) {
+        logResult('create_schedule', 'skip', 'Insufficient permissions');
+      } else {
+        logResult('create_schedule', 'fail', err.message);
+      }
+    }
+
+    // Verify schedules again
+    try {
+      const schedulesAfter = await client.getRMRSISchedules(newRsi.id);
+      if (schedulesAfter.length > 0) {
+        logResult(`get_schedules (after create): Found ${schedulesAfter.length} schedule(s)`, 'pass');
+        for (const sched of schedulesAfter) {
+          console.log(`    - ${sched.stage} (ID: ${sched.id}, Event: ${sched.event_type}, Action: ${sched.action_code})`);
+        }
+      } else if (testScheduleId !== null) {
+        logResult('get_schedules (after create)', 'fail', 'No schedules found after creation');
+      }
+    } catch (err: any) {
+      logResult('get_schedules (after create)', 'fail', err.message);
+    }
+
+    // Get RSI items (should be empty for new RSI)
+    try {
+      const items = await client.getRMRSIItems(newRsi.id);
+      logResult(`get_items: Found ${items.items.length} item(s)`, 'pass');
+    } catch (err: any) {
+      logResult('get_items', 'fail', err.message);
+    }
+
+    // Test RSI assignment (requires classified document)
+    if (RM_CLASSIFICATION_ID !== 0) {
+      try {
+        console.log('  Testing RSI assignment to classified document...');
+
+        // First declare doc as record
+        await client.applyRMClassification({
+          node_id: testDoc1.id,
+          class_id: RM_CLASSIFICATION_ID
+        });
+
+        // Get classification ID from document
+        const docClassifications = await client.getRMClassifications(testDoc1.id);
+        if (docClassifications.classifications.length > 0) {
+          const classId = docClassifications.classifications[0].id;
+
+          // Assign RSI to document
+          try {
+            await client.assignRMRSI({
+              node_id: testDoc1.id,
+              class_id: classId,
+              rsi_id: newRsi.id
+            });
+            logResult('assign RSI to node', 'pass');
+
+            // Get node RSIs
+            const nodeRsis = await client.getNodeRMRSIs(testDoc1.id);
+            logResult(`get_node_rsis: Found ${nodeRsis.rsis.length} RSI(s) on node`, 'pass');
+
+            // Remove RSI from node
+            try {
+              await client.removeRMRSI(testDoc1.id, classId);
+              logResult('remove RSI from node', 'pass');
+            } catch (err: any) {
+              logResult('remove RSI from node', 'fail', err.message);
+            }
+          } catch (err: any) {
+            if (err.message.includes('permission') || err.message.includes('not allowed')) {
+              logResult('assign RSI to node', 'skip', 'Insufficient permissions');
+            } else {
+              logResult('assign RSI to node', 'fail', err.message);
+            }
+          }
+
+          // Clean up: undeclare record
+          await client.removeRMClassification(testDoc1.id, classId);
+        }
+      } catch (err: any) {
+        logResult('RSI assignment test', 'fail', err.message);
+      }
+    } else {
+      console.log('  ○ Skipping RSI assignment tests (requires classified records)');
+      logResult('assign RSI to node', 'skip', 'Requires classified records');
+      logResult('get_node_rsis', 'skip', 'Requires classified records');
+      logResult('remove RSI from node', 'skip', 'Requires classified records');
+    }
+
+    // Get approval history (may be empty)
+    try {
+      const history = await client.getRMRSIApprovalHistory(newRsi.id);
+      logResult(`get_approval_history: Found ${history.length} approval(s)`, 'pass');
+    } catch (err: any) {
+      // Endpoint may not be available
+      if (err.message.includes('not found') || err.message.includes('404')) {
+        logResult('get_approval_history', 'skip', 'Endpoint not available');
+      } else {
+        logResult('get_approval_history', 'fail', err.message);
+      }
+    }
+
+    // Delete RSI
+    console.log('  Deleting test RSI...');
+    await client.deleteRMRSI(newRsi.id);
+    testRsiId = null;
+    logResult('delete RSI', 'pass');
+
+    // Verify deletion
+    try {
+      await client.getRMRSI(newRsi.id);
+      logResult('delete RSI verification', 'fail', 'RSI still exists');
+    } catch (err: any) {
+      if (err.message.includes('not found') || err.message.includes('404')) {
+        logResult('delete RSI verification', 'pass');
+      } else {
+        logResult('delete RSI verification', 'fail', err.message);
+      }
+    }
+
+  } catch (err: any) {
+    logResult('RSI lifecycle', 'fail', err.message);
+    // Cleanup RSI if created
+    if (testRsiId) {
+      try {
+        await client.deleteRMRSI(testRsiId);
+      } catch {}
+    }
+  }
+  } // end if (validRsiStatus)
   console.log('');
 
   // ========================================

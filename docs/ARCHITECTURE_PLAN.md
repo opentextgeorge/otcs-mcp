@@ -980,7 +980,7 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 | `apply_batch` | Create multiple cross-references |
 | `remove_batch` | Remove multiple cross-references |
 
-### Phase 7: Records Management - Advanced (2 consolidated tools)
+### Phase 7: RSI Retention Schedules ✅ Complete (1 consolidated tool)
 
 **Tool: `otcs_rm_rsi`**
 | Action | Description |
@@ -990,10 +990,16 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 | `create` | Create new RSI |
 | `update` | Update RSI metadata |
 | `delete` | Delete RSI |
+| `get_node_rsis` | Get RSIs assigned to a node |
 | `assign` | Assign RSI to classified node |
 | `remove` | Remove RSI from node |
 | `get_items` | Get items with specific RSI |
-| `approve` | Approve RSI schedule stage |
+| `get_schedules` | Get schedule stages for an RSI |
+| `create_schedule` | Create new retention stage |
+| `approve_schedule` | Approve RSI schedule stage |
+| `get_approval_history` | Get schedule approval history |
+
+### Phase 8: Records Management - Disposition (1 tool)
 
 **Tool: `otcs_rm_disposition`**
 | Action | Description |
@@ -1007,7 +1013,7 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 | `apply_hold` | Apply hold to disposition items |
 | `apply_accession` | Apply accession code to items |
 
-### Phase 8: Enhanced Features (4 consolidated tools)
+### Phase 9: Enhanced Features (4 consolidated tools)
 
 **Tool: `otcs_favorites`**
 | Action | Description |
@@ -1049,17 +1055,18 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 |-------|-------|--------|
 | 1-5 (Foundation through Permissions) | 33 | ✅ Complete |
 | 6 (RM Core) | 3 | ✅ Complete |
-| 7 (RM Advanced) | 2 | Planned |
-| 8 (Enhanced Features) | 4 | Planned |
-| **Current Total** | **36** | |
+| 7 (RSI Schedules) | 1 | ✅ Complete |
+| 8 (RM Disposition) | 1 | Planned |
+| 9 (Enhanced Features) | 4 | Planned |
+| **Current Total** | **37** | |
 | **Projected Total** | **42** | |
 
 ### API References
 
-Phase 6-7 tools use the Records Management REST API:
+Phase 6-8 tools use the Records Management REST API:
 - `docs/opentext-records-management-26.1.json`
 
-Phase 8 tools use the Content Server REST API:
+Phase 9 tools use the Content Server REST API:
 - `docs/content-server-rest-api-2.0.2.yaml`
 
 ---
@@ -1107,7 +1114,7 @@ class OTCSError extends Error {
 ```
 otcs-mcp/
 ├── src/
-│   ├── index.ts              # MCP server entry point (36 consolidated tools)
+│   ├── index.ts              # MCP server entry point (37 consolidated tools)
 │   ├── types.ts              # TypeScript type definitions
 │   └── client/
 │       └── otcs-client.ts    # OTCS REST API client (CS + BW + RM APIs)
@@ -1141,10 +1148,12 @@ Records Management API methods have been integrated directly into `otcs-client.t
 - ✅ RM Holds API tested and verified against live RM environment (create, apply, remove, delete holds)
 - ✅ RM Classifications API tested and verified (declare, update_details, undeclare with metadataToken handling)
 - ✅ RM Cross-References API tested and verified (list_types, apply, get_node_xrefs, remove)
+- ✅ Phase 7: RSI Retention Schedules - Full RSI lifecycle (1 tool, 13 actions)
+- ✅ RSI API tested: list, create, get, update, get_schedules, create_schedule, get_items, delete
 
 ### Up Next
-1. **Phase 7: RM Advanced** - RSI schedules and disposition processing (2 tools)
-2. **Phase 8: Enhanced Features** - Favorites, reminders, notifications, recycle bin (4 tools)
+1. **Phase 8: RM Disposition** - Disposition search and processing (1 tool)
+2. **Phase 9: Enhanced Features** - Favorites, reminders, notifications, recycle bin (4 tools)
 3. **Iterate** - Refine based on real agent workflows
 
 This architecture provides a solid foundation for building an intelligent document management agent that can reason about and operate on OpenText Content Server effectively.

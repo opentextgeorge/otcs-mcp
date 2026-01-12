@@ -1189,3 +1189,168 @@ export interface RMCrossRefApplyParams {
   ref_node_id: number;
   comment?: string;
 }
+
+// ============ RSI (Record Series Identifier) Types ============
+
+/**
+ * RSI Schedule stage - defines retention period and disposition action
+ */
+export interface RMRSISchedule {
+  id: number;
+  rsi_id: number;
+  stage: string;
+  object_type: 'LIV' | 'LRM';  // LIV = Classified Objects, LRM = RM Classifications
+  event_type: number;  // 1=Calculated Date, 2=Calendar, 3=Event Based, 4=Fixed Date, 5=Permanent
+  date_to_use?: number;  // 91=Create, 92=Reserved, 93=Modify, 94=Status, 95=Record, etc.
+  retention_years?: number;
+  retention_months?: number;
+  retention_days?: number;
+  action_code?: number;  // 0=None, 1=Change Status, 7=Close, 8=Finalize, 9=Mark Official, 32=Destroy, etc.
+  disposition?: string;
+  description?: string;
+  new_status?: string;
+  rule_code?: string;
+  rule_comment?: string;
+  fixed_date?: string;
+  event_condition?: string;
+  year_end_month?: number;
+  year_end_day?: number;
+  approved?: boolean;
+  approval_date?: string;
+  approved_by?: number;
+}
+
+/**
+ * RSI (Record Series Identifier) - retention schedule
+ */
+export interface RMRSI {
+  id: number;
+  name: string;
+  status: string;
+  status_date?: string;
+  description?: string;
+  subject?: string;
+  title?: string;
+  disp_control?: boolean;
+  discontinued?: boolean;
+  discontinue_date?: string;
+  discontinue_comment?: string;
+  source_app?: string;
+  editing_app?: string;
+  schedules?: RMRSISchedule[];
+}
+
+/**
+ * RSI list response
+ */
+export interface RMRSIListResponse {
+  rsis: RMRSI[];
+  total_count: number;
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * RSI items response - nodes assigned to an RSI
+ */
+export interface RMRSIItemsResponse {
+  rsi_id: number;
+  items: Array<{
+    id: number;
+    name: string;
+    type: number;
+    type_name: string;
+  }>;
+  total_count: number;
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * Node RSIs response - RSIs assigned to a node
+ */
+export interface RMNodeRSIsResponse {
+  node_id: number;
+  rsis: Array<{
+    rsi_id: number;
+    rsi_name: string;
+    class_id?: number;
+    class_name?: string;
+  }>;
+}
+
+/**
+ * Parameters for creating an RSI
+ */
+export interface RMRSICreateParams {
+  name: string;
+  status: string;
+  status_date?: string;
+  description?: string;
+  subject?: string;
+  title?: string;
+  disp_control?: boolean;
+  source_app?: string;
+  editing_app?: string;
+}
+
+/**
+ * Parameters for updating an RSI
+ */
+export interface RMRSIUpdateParams {
+  name?: string;
+  new_name?: string;
+  status?: string;
+  status_date?: string;
+  description?: string;
+  subject?: string;
+  title?: string;
+  discontinue?: boolean;
+  discontinue_date?: string;
+  discontinue_comment?: string;
+  disp_control?: boolean;
+  editing_app?: string;
+}
+
+/**
+ * Parameters for creating an RSI schedule
+ */
+export interface RMRSIScheduleCreateParams {
+  rsi_id: number;
+  stage: string;
+  object_type: 'LIV' | 'LRM';
+  event_type: number;
+  date_to_use?: number;
+  retention_years?: number;
+  retention_months?: number;
+  retention_days?: number;
+  action_code?: number;
+  disposition?: string;
+  description?: string;
+  new_status?: string;
+  rule_code?: string;
+  rule_comment?: string;
+  fixed_date?: string;
+  event_condition?: string;
+  year_end_month?: number;
+  year_end_day?: number;
+  category_id?: number;
+  category_attribute_id?: number;
+  fixed_retention?: boolean;
+  maximum_retention?: boolean;
+  retention_intervals?: number;
+  min_num_versions_to_keep?: number;
+  purge_superseded?: boolean;
+  purge_majors?: boolean;
+  mark_official_rendition?: boolean;
+}
+
+/**
+ * Parameters for assigning RSI to a classified node
+ */
+export interface RMRSIAssignParams {
+  node_id: number;
+  class_id: number;
+  rsi_id: number;
+  status_date?: string;
+}
