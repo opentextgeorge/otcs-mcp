@@ -10,14 +10,16 @@ An MCP (Model Context Protocol) server for OpenText Content Server that enables 
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1. Foundation | Complete | Browse, search, upload, download, folders |
-| 2. Business Workspaces | Complete | Workspace types, creation, relations, roles |
-| 3. Workflows | Complete | Assignments, forms, tasks, lifecycle |
-| 4. Metadata | Complete | Categories, forms, workspace properties |
-| 5. Permissions & Users | Complete | Members, groups, ACL management |
-| 6-8. Advanced | Planned | Records Management, Intelligence |
+| 1. Foundation | ✅ Complete | Browse, search, upload, download, folders |
+| 2. Business Workspaces | ✅ Complete | Workspace types, creation, relations, roles |
+| 3. Workflows | ✅ Complete | Assignments, forms, tasks, lifecycle |
+| 4. Metadata | ✅ Complete | Categories, forms, workspace properties |
+| 5. Permissions & Users | ✅ Complete | Members, groups, ACL management |
+| 6. RM Core | Planned | Classifications, holds, cross-references |
+| 7. RM Advanced | Planned | RSI schedules, disposition processing |
+| 8. Enhanced Features | Planned | Favorites, reminders, notifications, recycle bin |
 
-**Total: 33 consolidated MCP tools** (reduced from 71 for better AI agent performance)
+**Current: 33 tools** | **Projected: 42 tools** (consolidated for AI agent performance)
 
 ## Tool Profiles
 
@@ -332,19 +334,22 @@ otcs-mcp/
 
 ## Roadmap
 
-### Coming Soon: Records Management (Phase 6-7)
+### Phase 6: Records Management - Core (3 tools)
+- `otcs_rm_classification` - Declare records, manage RM classifications
+- `otcs_rm_holds` - Legal/administrative holds management
+- `otcs_rm_xref` - Cross-references between records
 
-- RM Classifications & record declaration
-- Legal/administrative holds
-- Disposition processing
-- Physical object circulation
-- Security clearance levels
+### Phase 7: Records Management - Advanced (2 tools)
+- `otcs_rm_rsi` - RSI (Record Series Identifier) schedules
+- `otcs_rm_disposition` - Disposition search and processing
 
-### Phase 8: Intelligence Layer
+### Phase 8: Enhanced Features (4 tools)
+- `otcs_favorites` - Manage favorites and tabs
+- `otcs_reminders` - Node reminders
+- `otcs_notifications` - Notification interests
+- `otcs_recycle_bin` - Restore/purge deleted items
 
-- Smart filing recommendations
-- Compliance reporting
-- Activity summarization
+**Projected Total: 42 consolidated tools**
 
 See [ARCHITECTURE_PLAN.md](./docs/ARCHITECTURE_PLAN.md) for detailed specifications.
 

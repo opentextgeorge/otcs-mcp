@@ -934,23 +934,124 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 
 **Tools Implemented:** 3 consolidated tools (previously 13 individual tools)
 
-### Phase 6: Records Management - Core
-- RM Classifications (declare records, update record details)
-- Legal & Administrative Holds
-- Cross-References
-- Security Clearance
+### Phase 6: Records Management - Core (3 consolidated tools)
 
-### Phase 7: Records Management - Advanced
-- RSI Schedules management
-- Disposition processing
-- Physical Objects & Circulation
-- Storage Management (boxes, locators, labels)
+**Tool: `otcs_rm_classification`**
+| Action | Description |
+|--------|-------------|
+| `get` | Get RM classifications on a node |
+| `apply` | Apply RM classification (declare as record) |
+| `remove` | Remove RM classification |
+| `update_details` | Update record details (vital record, official, etc.) |
+| `make_confidential` | Mark record as confidential |
+| `remove_confidential` | Remove confidential marking |
+| `finalize` | Finalize records |
 
-### Phase 8: Intelligence Layer
-- Smart filing recommendations with RM classification
-- Compliance reporting
-- Retention policy suggestions
-- Activity summarization
+**Tool: `otcs_rm_holds`**
+| Action | Description |
+|--------|-------------|
+| `list` | List all holds or holds on a node |
+| `get` | Get hold details |
+| `create` | Create a new hold |
+| `update` | Update hold properties |
+| `delete` | Delete a hold |
+| `apply` | Apply hold to node(s) |
+| `remove` | Remove hold from node(s) |
+| `get_items` | Get items under a hold |
+| `get_users` | Get users assigned to a hold |
+| `add_users` | Assign users to hold |
+| `remove_users` | Remove users from hold |
+
+**Tool: `otcs_rm_xref`**
+| Action | Description |
+|--------|-------------|
+| `list` | List cross-references on a node or all xref types |
+| `get` | Get cross-reference type details |
+| `create` | Create new cross-reference type |
+| `apply` | Apply cross-reference between nodes |
+| `remove` | Remove cross-reference |
+| `delete_type` | Delete cross-reference type |
+
+### Phase 7: Records Management - Advanced (2 consolidated tools)
+
+**Tool: `otcs_rm_rsi`**
+| Action | Description |
+|--------|-------------|
+| `list` | List all RSI schedules |
+| `get` | Get RSI details with schedules |
+| `create` | Create new RSI |
+| `update` | Update RSI metadata |
+| `delete` | Delete RSI |
+| `assign` | Assign RSI to classified node |
+| `remove` | Remove RSI from node |
+| `get_items` | Get items with specific RSI |
+| `approve` | Approve RSI schedule stage |
+
+**Tool: `otcs_rm_disposition`**
+| Action | Description |
+|--------|-------------|
+| `start_search` | Start disposition search |
+| `get_results` | Get disposition search results |
+| `change_decision` | Change review decision for items |
+| `change_action` | Change disposition action for items |
+| `perform_action` | Execute disposition action |
+| `finish_review` | Complete reviewer's review |
+| `apply_hold` | Apply hold to disposition items |
+| `apply_accession` | Apply accession code to items |
+
+### Phase 8: Enhanced Features (4 consolidated tools)
+
+**Tool: `otcs_favorites`**
+| Action | Description |
+|--------|-------------|
+| `list` | List user's favorites |
+| `add` | Add node to favorites |
+| `remove` | Remove from favorites |
+| `update` | Update favorite (rename, reorder) |
+| `list_tabs` | List favorite tabs |
+| `add_tab` | Create favorites tab |
+| `remove_tab` | Delete favorites tab |
+
+**Tool: `otcs_reminders`**
+| Action | Description |
+|--------|-------------|
+| `list` | Get reminders on a node |
+| `create` | Create reminder on node |
+| `update` | Update reminder details |
+| `delete` | Delete reminder |
+
+**Tool: `otcs_notifications`**
+| Action | Description |
+|--------|-------------|
+| `get` | Get notification interests on node |
+| `set` | Set notification interests |
+
+**Tool: `otcs_recycle_bin`**
+| Action | Description |
+|--------|-------------|
+| `list` | List items in recycle bin |
+| `restore` | Restore items to original location |
+| `purge` | Permanently delete items |
+
+---
+
+### Tool Count Summary
+
+| Phase | Tools | Status |
+|-------|-------|--------|
+| 1-5 (Foundation through Permissions) | 33 | ✅ Complete |
+| 6 (RM Core) | 3 | Planned |
+| 7 (RM Advanced) | 2 | Planned |
+| 8 (Enhanced Features) | 4 | Planned |
+| **Total** | **42** | |
+
+### API References
+
+Phase 6-7 tools use the Records Management REST API:
+- `docs/opentext-records-management-26.1.json`
+
+Phase 8 tools use the Content Server REST API:
+- `docs/content-server-rest-api-2.0.2.yaml`
 
 ---
 
