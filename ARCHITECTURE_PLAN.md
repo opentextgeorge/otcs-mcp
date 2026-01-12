@@ -10,6 +10,37 @@ This document outlines the architecture for MCP (Model Context Protocol) tools t
 
 ---
 
+## Tool Consolidation (v2.0)
+
+As of version 2.0, tools have been consolidated from 71 individual tools down to **33 tools** for better AI agent performance. The consolidation follows the principle of **one tool per resource type** with an `action` parameter for CRUD operations.
+
+### Consolidation Summary
+
+| Category | Before | After | Pattern |
+|----------|--------|-------|---------|
+| Permissions | 7 tools | 1 tool | `otcs_permissions` with actions: get, add, update, remove, effective, set_owner, set_public |
+| Members | 6 tools | 2 tools | `otcs_members` (search/get) + `otcs_group_membership` (add/remove) |
+| Categories | 4 tools | 2 tools | `otcs_categories` with actions: list, get, add, update, remove, get_form |
+| Node Operations | 4 tools | 1 tool | `otcs_node_action` with actions: copy, move, rename, delete |
+| Folders | 2 tools | 1 tool | `otcs_create_folder` with optional `path` parameter |
+| Versions | 2 tools | 1 tool | `otcs_versions` with actions: list, add |
+| Upload | 2 tools | 1 tool | `otcs_upload` with file_path OR content_base64 |
+| Workspace Relations | 3 tools | 1 tool | `otcs_workspace_relations` with actions: list, add, remove |
+| Workspace Roles | 5 tools | 1 tool | `otcs_workspace_roles` with multiple actions |
+
+### Tool Profiles
+
+Users can select a tool profile via `OTCS_TOOL_PROFILE` environment variable:
+
+| Profile | Tools | Use Case |
+|---------|-------|----------|
+| `core` | 18 | Basic document management |
+| `workflow` | 26 | Document management + full workflow support |
+| `admin` | 24 | Document management + permissions/admin tools |
+| `full` | 33 | All tools (default) |
+
+---
+
 ## Core Design Principles
 
 ### 1. Agent-Friendly Abstractions
