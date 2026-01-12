@@ -529,3 +529,313 @@ export interface WorkflowFormResponse {
     data: WorkflowFormSchema;
   }>;
 }
+
+// ============ Workflow Forms & Attributes Types ============
+
+/**
+ * Alpaca form field schema from /v1/forms/processes/tasks/update
+ */
+export interface AlpacaFormField {
+  type?: string;
+  title?: string;
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+  enum?: string[];
+  readonly?: boolean;
+  hidden?: boolean;
+  format?: string;
+  maxLength?: number;
+  minLength?: number;
+  maximum?: number;
+  minimum?: number;
+  properties?: Record<string, AlpacaFormField>;
+  items?: AlpacaFormField;
+}
+
+/**
+ * Alpaca form structure returned by workflow form endpoints
+ */
+export interface AlpacaForm {
+  data: Record<string, unknown>;          // Current field values
+  options: {
+    fields?: Record<string, {
+      label?: string;
+      helper?: string;
+      type?: string;
+      hidden?: boolean;
+      readonly?: boolean;
+      order?: number;
+      optionLabels?: string[];
+      placeholder?: string;
+    }>;
+    form?: Record<string, unknown>;
+  };
+  schema: {
+    type?: string;
+    properties?: Record<string, AlpacaFormField>;
+    required?: string[];
+  };
+  columns?: 1 | 2;
+}
+
+/**
+ * Workflow action (standard or custom disposition)
+ */
+export interface WorkflowFormAction {
+  key: string;
+  label: string;
+}
+
+/**
+ * Data package info (attachments=1, comments=2, attributes=3)
+ */
+export interface WorkflowFormDataPackage {
+  type: number;
+  sub_type: number;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Workflow task info from form schema
+ */
+export interface WorkflowFormTaskInfo {
+  type?: number;
+  sub_type?: number;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Message info for delegate/review workflows
+ */
+export interface WorkflowFormMessage {
+  performer?: number;
+  type?: string;  // 'delegate', 'review', 'review_return'
+  text?: string;
+}
+
+/**
+ * Complete workflow properties form info from /v1/forms/processes/tasks/update
+ */
+export interface WorkflowPropertiesFormInfo {
+  data: {
+    title?: string;
+    instructions?: string;
+    priority?: number;
+    comments_on?: boolean;
+    attachments_on?: boolean;
+    data_packages?: WorkflowFormDataPackage[];
+    actions?: WorkflowFormAction[];
+    custom_actions?: WorkflowFormAction[];
+    message?: WorkflowFormMessage;
+    member_accept?: boolean;
+    reply_performer_id?: number;
+    task?: WorkflowFormTaskInfo;
+    authentication?: boolean;
+  };
+  forms: AlpacaForm[];
+}
+
+/**
+ * Parameters for updating draft workflow form
+ */
+export interface UpdateDraftFormParams {
+  draftprocess_id: number;
+  action: 'formUpdate' | 'Initiate';
+  comment?: string;
+  values?: Record<string, unknown>;
+}
+
+/**
+ * Workflow info response from /v2/workflows/status/info
+ */
+export interface WorkflowInfoResponse {
+  results: {
+    Attachments?: number;
+    Attributes?: Array<{
+      Content?: {
+        Rootset?: {
+          Children?: Array<{
+            DisplayName?: string;
+            ID?: string;
+            Name?: string;
+            Type?: string;
+            Value?: unknown;
+          }>;
+          DisplayName?: string;
+          ID?: string;
+          Name?: string;
+        };
+      };
+    }>;
+    auditInfo?: Array<{
+      action?: string;
+      date?: string;
+      performer?: string;
+      step?: string;
+    }>;
+    comments?: Array<{
+      comment?: string;
+      date?: string;
+      user_id?: number;
+      user_name?: string;
+    }>;
+    forms?: Array<{
+      AvailableForms?: {
+        data?: Record<string, unknown>;
+      };
+    }>;
+    generalInfo?: Array<{
+      date_due?: string;
+      date_initiated?: string;
+      initiator_id?: number;
+      initiator_name?: string;
+      status?: string;
+      title?: string;
+      wf_name?: string;
+      work_id?: number;
+    }>;
+    ManagerList?: Array<{
+      id?: number;
+      name?: string;
+    }>;
+    stepList?: Array<{
+      disposition?: string;
+      performer?: string;
+      start_date?: string;
+      step_name?: string;
+      status?: string;
+    }>;
+  };
+}
+
+/**
+ * Simplified workflow info for agent consumption
+ */
+export interface WorkflowInfo {
+  work_id: number;
+  title: string;
+  status: string;
+  date_initiated?: string;
+  date_due?: string;
+  initiator?: {
+    id: number;
+    name: string;
+  };
+  managers?: Array<{
+    id: number;
+    name: string;
+  }>;
+  steps?: Array<{
+    step_name: string;
+    status: string;
+    performer?: string;
+    disposition?: string;
+    start_date?: string;
+  }>;
+  comments?: Array<{
+    comment: string;
+    date: string;
+    user_name: string;
+  }>;
+  attributes?: Record<string, unknown>;
+  attachment_count?: number;
+}
+
+/**
+ * Accept task response
+ */
+export interface AcceptTaskResponse {
+  success: boolean;
+  message?: string;
+}
+
+// ============ Category & Metadata Types ============
+
+/**
+ * Category applied to a node
+ */
+export interface CategoryInfo {
+  id: number;
+  name: string;
+  display_name?: string;
+}
+
+/**
+ * Category attribute definition
+ */
+export interface CategoryAttribute {
+  key: string;
+  name: string;
+  type: string;
+  type_name?: string;
+  required?: boolean;
+  multi_value?: boolean;
+  max_length?: number;
+  min_value?: number;
+  max_value?: number;
+  default_value?: unknown;
+  read_only?: boolean;
+  hidden?: boolean;
+  valid_values?: Array<{ key: string; value: string }>;
+  description?: string;
+}
+
+/**
+ * Category with its attributes and values
+ */
+export interface CategoryWithValues {
+  id: number;
+  name: string;
+  display_name?: string;
+  attributes: Array<{
+    key: string;
+    name: string;
+    type: string;
+    value?: unknown;
+    values?: unknown[];
+    display_value?: string;
+  }>;
+}
+
+/**
+ * Category values to set/update (keyed by attribute key)
+ * Key format: {category_id}_{attribute_id} or {category_id}_{set_id}_{row}_{attribute_id}
+ */
+export interface CategoryValues {
+  [key: string]: unknown;
+}
+
+/**
+ * Response from adding a category
+ */
+export interface AddCategoryResponse {
+  success: boolean;
+  category_id: number;
+  message?: string;
+}
+
+/**
+ * Category form schema for creating/updating categories
+ */
+export interface CategoryFormSchema {
+  category_id: number;
+  category_name: string;
+  attributes: CategoryAttribute[];
+}
+
+/**
+ * Response containing categories on a node
+ */
+export interface NodeCategoriesResponse {
+  node_id: number;
+  categories: CategoryWithValues[];
+}
+
+/**
+ * Workspace metadata form schema
+ */
+export interface WorkspaceMetadataFormSchema {
+  workspace_id: number;
+  categories: CategoryFormSchema[];
+}

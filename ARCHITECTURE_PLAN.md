@@ -281,7 +281,10 @@ OpenText Content Server provides comprehensive workflow capabilities for routing
 | `otcs_send_workflow_task` | Execute task action (SendOn, Delegate, Review) | `PUT /v2/processes/{id}/subprocesses/{sub}/tasks/{task}` |
 | `otcs_update_workflow_status` | Change process status (suspend/resume/stop) | `PUT /v2/processes/{id}/status` |
 | `otcs_delete_workflow` | Delete a workflow instance | `DELETE /v2/processes/{id}` |
-| `otcs_get_workflow_form` | Get workflow task form schema | `GET /v2/forms/workflowproperties` |
+| `otcs_get_workflow_form` | Get workflow task form schema | `GET /v1/forms/processes/tasks/update` |
+| `otcs_get_workflow_info` | Get comprehensive workflow details | `GET /v2/workflows/status/info` |
+| `otcs_update_draft_workflow_form` | Update form data on draft workflow | `PUT /v2/draftprocesses/{id}` |
+| `otcs_accept_workflow_task` | Accept a group-assigned task | `POST /v2/mobilegroupassignment/accept/...` |
 
 **Parameters for `otcs_get_assignments`:**
 ```typescript
@@ -300,9 +303,10 @@ OpenText Content Server provides comprehensive workflow capabilities for routing
   process_id: number;           // Workflow instance ID
   subprocess_id: number;        // Sub-workflow ID
   task_id: number;              // Task ID
-  action?: string;              // Standard action: 'SendOn' | 'SendForReview' | 'Delegate'
+  action?: string;              // Standard action: 'SendOn' | 'SendForReview' | 'Delegate' | 'Reply'
   custom_action?: string;       // Custom disposition action
   comment?: string;             // Comment for the action
+  form_data?: Record<string, string>;  // Workflow form field values
 }
 ```
 
@@ -324,6 +328,115 @@ OpenText Content Server provides comprehensive workflow capabilities for routing
 - "Delegate this review task to John"
 - "Show the activity history for workflow 12345"
 - "Stop the workflow for project ABC"
+
+---
+
+### Category 12a: Workflow Forms & Attributes
+
+Workflow tasks often require the user to fill in form fields (attributes) before completing an action. The API provides comprehensive support for discovering form schemas and updating field values.
+
+| Tool | Purpose | API Operations |
+|------|---------|----------------|
+| `otcs_get_workflow_task_form` | Get Alpaca form schema for a task | `GET /v1/forms/processes/tasks/update` |
+| `otcs_get_draft_workflow_form` | Get form schema for draft workflow | `GET /v1/forms/draftprocesses` |
+| `otcs_update_draft_form` | Update form values before initiation | `PUT /v2/draftprocesses/{id}` with `action=formUpdate` |
+| `otcs_get_workflow_info` | Get workflow details with forms/attributes | `GET /v2/workflows/status/info` |
+
+**Workflow Form Schema Response:**
+```typescript
+interface WorkflowFormSchema {
+  data: {
+    title: string;                    // Workflow title
+    instructions: string;             // Task instructions
+    priority: number;                 // 0=Low, 50=Medium, 100=High
+    comments_on: boolean;             // Comments enabled
+    attachments_on: boolean;          // Attachments enabled
+    actions: WorkflowAction[];        // Standard actions (SendOn, Delegate, etc.)
+    custom_actions: WorkflowAction[]; // Custom disposition actions
+    member_accept: boolean;           // Requires accept before working
+    authentication: boolean;          // Requires re-authentication
+    data_packages: DataPackage[];     // Comments (2), Attachments (1), Attributes (3)
+  };
+  forms: AlpacaForm[];                // Form definitions with data/options/schema
+}
+
+interface AlpacaForm {
+  data: Record<string, any>;          // Current field values
+  options: Record<string, any>;       // Field display options
+  schema: Record<string, any>;        // Field type definitions
+  columns: 1 | 2;                     // Form layout columns
+}
+```
+
+**Workflow Form Field Naming Convention:**
+
+The API uses a specific naming convention for form field keys:
+
+| Field Type | Format | Example |
+|------------|--------|---------|
+| Workflow Title | `WorkflowForm_Title` | `"WorkflowForm_Title": "New Title"` |
+| Workflow Due Date | `WorkflowForm_WorkflowDueDate` | `"WorkflowForm_WorkflowDueDate": "2024-12-31 23:59:59.000"` |
+| Simple Attribute | `WorkflowForm_{fieldid}` | `"WorkflowForm_10": "value"` |
+| Multi-value Attribute | `WorkflowForm_{fieldid}` | `"WorkflowForm_10": ["val1", "val2"]` |
+| Form Attribute | `WorkflowForm_{type}x{subtype}x{formid}x{fieldid}` | `"WorkflowForm_1x4x1x3": "value"` |
+| Set Attribute (single) | `WorkflowForm_{type}x{subtype}x{formid}x{setid}_x_{fieldid}` | `"WorkflowForm_1x4x1x4_x_6": "value"` |
+| Set Attribute (row) | `WorkflowForm_{...x...x...x{setid}}` | `[{"..._x_5": "a", "..._x_6": "b"}]` |
+
+**Parameters for `otcs_update_draft_form`:**
+```typescript
+{
+  draftprocess_id: number;       // Draft workflow ID
+  action: 'formUpdate';          // Must be 'formUpdate' to update fields
+  values: {                      // Form field values to update
+    WorkflowForm_Title?: string;
+    WorkflowForm_WorkflowDueDate?: string;  // Format: "yyyy-MM-dd HH:mm:ss.SSS"
+    [key: string]: string | string[] | object[];  // Dynamic field keys
+  };
+}
+```
+
+**Example: Update Workflow Form Before Initiation:**
+```typescript
+// Step 1: Create draft workflow
+const draft = await otcs_create_draft_workflow({ workflow_id: 5000, doc_ids: "12345" });
+
+// Step 2: Get form schema to discover field names
+const form = await otcs_get_draft_workflow_form({ draftprocess_id: draft.draftprocess_id });
+// form.forms[0].schema contains field definitions
+
+// Step 3: Update form values
+await otcs_update_draft_form({
+  draftprocess_id: draft.draftprocess_id,
+  action: 'formUpdate',
+  values: {
+    WorkflowForm_Title: "Contract Approval - Acme Corp",
+    WorkflowForm_WorkflowDueDate: "2024-12-31 17:00:00.000",
+    WorkflowForm_10: "High Priority",        // Custom attribute
+    WorkflowForm_1x4x1x2: "Legal Review"     // Form field
+  }
+});
+
+// Step 4: Initiate the workflow
+await otcs_update_draft_form({
+  draftprocess_id: draft.draftprocess_id,
+  action: 'Initiate',
+  comment: 'Starting approval process'
+});
+```
+
+**Agent Use Cases:**
+- "What form fields are required for this workflow task?"
+- "Set the due date to end of month before approving"
+- "Fill in the approval date field and send on the task"
+- "Show me the workflow attributes I need to complete"
+- "Update the priority to High and delegate to John"
+
+**Data Package Types:**
+| Type | SubType | Description |
+|------|---------|-------------|
+| 1 | 1 | Attachments |
+| 1 | 2 | Comments |
+| 1 | 3 | Attributes (workflow form fields) |
 
 ---
 
@@ -725,6 +838,15 @@ Agent: "Give me a summary of the Acme Corp customer workspace"
 - Task actions (SendOn, Delegate, SendForReview)
 - Workflow status changes (suspend, resume, stop, archive)
 - Workflow activity history
+
+### Phase 3a: Workflow Forms & Attributes 🚧
+- Get workflow task form schema (Alpaca forms)
+- Get draft workflow form schema
+- Update draft workflow form values (formUpdate action)
+- Get comprehensive workflow info (forms, attributes, comments)
+- Accept group-assigned workflow tasks
+- Workflow form field name convention support
+- Multi-value and set attribute handling
 
 ### Phase 4: Metadata & Categories
 - Category operations

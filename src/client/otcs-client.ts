@@ -30,6 +30,19 @@ import {
   WorkflowTaskActionParams,
   ActiveWorkflowsOptions,
   WorkflowFormSchema,
+  // Workflow forms types
+  WorkflowPropertiesFormInfo,
+  UpdateDraftFormParams,
+  WorkflowInfo,
+  AcceptTaskResponse,
+  // Category types
+  CategoryInfo,
+  CategoryAttribute,
+  CategoryWithValues,
+  CategoryValues,
+  CategoryFormSchema,
+  NodeCategoriesResponse,
+  WorkspaceMetadataFormSchema,
 } from '../types.js';
 
 export class OTCSClient {
@@ -1234,40 +1247,525 @@ export class OTCSClient {
 
   /**
    * Get workflow task form schema (for displaying task properties)
+   * Uses /v1/forms/processes/tasks/update for Alpaca form schema
    */
   async getWorkflowTaskForm(processId: number, subprocessId: number, taskId: number): Promise<WorkflowFormSchema> {
     const response = await this.request<any>(
       'GET',
-      `/v2/forms/workflowproperties?process_id=${processId}&subprocess_id=${subprocessId}&task_id=${taskId}`
+      `/v1/forms/processes/tasks/update?process_id=${processId}&subprocess_id=${subprocessId}&task_id=${taskId}`
     );
 
-    const form = response.forms?.[0]?.data || {};
+    const data = response.data || {};
     return {
       workflow_id: processId,
       subprocess_id: subprocessId,
       task_id: taskId,
-      title: form.title,
-      instructions: form.instructions,
-      priority: form.priority,
-      comments_enabled: form.comments_enabled,
-      attachments_enabled: form.attachments_enabled,
-      actions: form.actions || [],
-      custom_actions: form.custom_actions || [],
-      data_packages: form.data_packages || [],
+      title: data.title,
+      instructions: data.instructions,
+      priority: data.priority,
+      comments_enabled: data.comments_on,
+      attachments_enabled: data.attachments_on,
+      actions: data.actions || [],
+      custom_actions: data.custom_actions || [],
+      data_packages: data.data_packages || [],
     };
   }
 
   /**
-   * Get workflow info by instance ID
+   * Get full workflow task form with Alpaca forms (comprehensive form schema)
+   * Returns the complete form structure including field definitions
+   */
+  async getWorkflowTaskFormFull(processId: number, subprocessId: number, taskId: number): Promise<WorkflowPropertiesFormInfo> {
+    const response = await this.request<any>(
+      'GET',
+      `/v1/forms/processes/tasks/update?process_id=${processId}&subprocess_id=${subprocessId}&task_id=${taskId}`
+    );
+
+    return {
+      data: {
+        title: response.data?.title,
+        instructions: response.data?.instructions,
+        priority: response.data?.priority,
+        comments_on: response.data?.comments_on,
+        attachments_on: response.data?.attachments_on,
+        data_packages: response.data?.data_packages || [],
+        actions: response.data?.actions || [],
+        custom_actions: response.data?.custom_actions || [],
+        message: response.data?.message,
+        member_accept: response.data?.member_accept,
+        reply_performer_id: response.data?.reply_performer_id,
+        task: response.data?.task,
+        authentication: response.data?.authentication,
+      },
+      forms: response.forms || [],
+    };
+  }
+
+  /**
+   * Get draft workflow form schema
+   * Uses /v1/forms/draftprocesses for Alpaca form schema
+   */
+  async getDraftWorkflowForm(draftprocessId: number): Promise<WorkflowPropertiesFormInfo> {
+    const response = await this.request<any>(
+      'GET',
+      `/v1/forms/draftprocesses?draftprocess_id=${draftprocessId}`
+    );
+
+    return {
+      data: {
+        title: response.data?.title,
+        instructions: response.data?.instructions,
+        priority: response.data?.priority,
+        comments_on: response.data?.comments_on,
+        attachments_on: response.data?.attachments_on,
+        data_packages: response.data?.data_packages || [],
+        actions: response.data?.actions || [],
+        custom_actions: response.data?.custom_actions || [],
+        message: response.data?.message,
+        member_accept: response.data?.member_accept,
+        reply_performer_id: response.data?.reply_performer_id,
+        task: response.data?.task,
+        authentication: response.data?.authentication,
+      },
+      forms: response.forms || [],
+    };
+  }
+
+  /**
+   * Update draft workflow form values or initiate the workflow
+   * action: 'formUpdate' to update form values, 'Initiate' to start the workflow
+   */
+  async updateDraftWorkflowForm(params: UpdateDraftFormParams): Promise<void> {
+    const formData = new URLSearchParams();
+    formData.append('action', params.action);
+
+    if (params.comment) {
+      formData.append('comment', params.comment);
+    }
+
+    if (params.values && params.action === 'formUpdate') {
+      formData.append('values', JSON.stringify(params.values));
+    }
+
+    await this.request<void>(
+      'PUT',
+      `/v2/draftprocesses/${params.draftprocess_id}`,
+      undefined,
+      formData
+    );
+  }
+
+  /**
+   * Get comprehensive workflow info by instance ID
+   * Returns forms, attributes, comments, and step history
+   */
+  async getWorkflowInfoFull(workId: number): Promise<WorkflowInfo> {
+    const response = await this.request<any>('GET', `/v2/workflows/status/info?workid=${workId}`);
+
+    const results = response.results || {};
+    const generalInfo = Array.isArray(results.generalInfo) ? results.generalInfo[0] : results.generalInfo || {};
+    const managers = Array.isArray(results.ManagerList) ? results.ManagerList : [];
+    const stepList = Array.isArray(results.stepList) ? results.stepList : [];
+    const comments = Array.isArray(results.comments) ? results.comments : [];
+    const attributes = Array.isArray(results.Attributes) ? results.Attributes : [];
+
+    // Extract attribute values into a flat object
+    const attributeValues: Record<string, unknown> = {};
+    for (const attr of attributes) {
+      const children = Array.isArray(attr?.Content?.Rootset?.Children)
+        ? attr.Content.Rootset.Children
+        : [];
+      for (const child of children) {
+        if (child.Name && child.Value !== undefined) {
+          attributeValues[child.Name] = child.Value;
+        }
+      }
+    }
+
+    return {
+      work_id: workId,
+      title: generalInfo.title || generalInfo.wf_name || '',
+      status: generalInfo.status || '',
+      date_initiated: generalInfo.date_initiated,
+      date_due: generalInfo.date_due,
+      initiator: generalInfo.initiator_id ? {
+        id: generalInfo.initiator_id,
+        name: generalInfo.initiator_name || '',
+      } : undefined,
+      managers: managers.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+      })),
+      steps: stepList.map((s: any) => ({
+        step_name: s.step_name || '',
+        status: s.status || '',
+        performer: s.performer,
+        disposition: s.disposition,
+        start_date: s.start_date,
+      })),
+      comments: comments.map((c: any) => ({
+        comment: c.comment || '',
+        date: c.date || '',
+        user_name: c.user_name || '',
+      })),
+      attributes: attributeValues,
+      attachment_count: results.Attachments,
+    };
+  }
+
+  /**
+   * Get workflow info by instance ID (simplified)
    */
   async getWorkflowInfo(workflowInstanceId: number): Promise<WorkflowStatus> {
     const params = new URLSearchParams();
-    params.append('workflowInstanceId', workflowInstanceId.toString());
+    params.append('workid', workflowInstanceId.toString());
 
     const response = await this.request<any>('GET', `/v2/workflows/status/info?${params.toString()}`);
 
-    const data = response.results?.data || response.results || response;
-    return this.transformWorkflowStatus(data);
+    const results = response.results || {};
+    const generalInfo = results.generalInfo?.[0] || {};
+
+    return {
+      workflow_id: workflowInstanceId,
+      workflow_name: generalInfo.wf_name || generalInfo.title || '',
+      workflow_status: generalInfo.status || '',
+      date_initiated: generalInfo.date_initiated,
+      date_due: generalInfo.date_due,
+      initiator: generalInfo.initiator_id ? {
+        id: generalInfo.initiator_id,
+        name: generalInfo.initiator_name || '',
+      } : undefined,
+    };
+  }
+
+  /**
+   * Accept a group-assigned workflow task
+   */
+  async acceptWorkflowTask(processId: number, subprocessId: number, taskId: number): Promise<AcceptTaskResponse> {
+    const response = await this.request<any>(
+      'POST',
+      `/v2/mobilegroupassignment/accept/taskid/${taskId}/processid/${processId}/subprocessid/${subprocessId}`
+    );
+
+    return {
+      success: true,
+      message: response.results?.data?.message || 'Task accepted successfully',
+    };
+  }
+
+  /**
+   * Check if a workflow task is assigned to a group
+   */
+  async checkGroupAssignment(processId: number, subprocessId: number, taskId: number): Promise<boolean> {
+    try {
+      const response = await this.request<any>(
+        'GET',
+        `/v2/mobilegroupassignment/check/taskid/${taskId}/processid/${processId}/subprocessid/${subprocessId}`
+      );
+      return response.results?.data?.isGroupAssignment === true;
+    } catch {
+      return false;
+    }
+  }
+
+  // ============ Category & Metadata Operations ============
+
+  /**
+   * Get all categories applied to a node
+   */
+  async getCategories(nodeId: number, includeMetadata: boolean = false): Promise<NodeCategoriesResponse> {
+    const params = includeMetadata ? '?metadata' : '';
+    const response = await this.request<any>('GET', `/v2/nodes/${nodeId}/categories${params}`);
+
+    const categories: CategoryWithValues[] = [];
+    const results = response.results || [];
+
+    // Response structure: results[].data.categories - each category has attribute keys and values
+    for (const result of results) {
+      const data = result.data || result;
+      if (data.categories) {
+        // Categories is an object keyed by category ID
+        for (const [catIdStr, catData] of Object.entries(data.categories as Record<string, any>)) {
+          const catId = parseInt(catIdStr, 10);
+          const attributes: CategoryWithValues['attributes'] = [];
+
+          // Extract attributes from the category data
+          for (const [attrKey, attrValue] of Object.entries(catData)) {
+            if (attrKey !== 'name' && !attrKey.endsWith('_name')) {
+              attributes.push({
+                key: attrKey,
+                name: attrKey, // Will be populated from metadata if available
+                type: typeof attrValue === 'object' ? 'object' : typeof attrValue,
+                value: attrValue,
+              });
+            }
+          }
+
+          categories.push({
+            id: catId,
+            name: catData.name || `Category ${catId}`,
+            attributes,
+          });
+        }
+      }
+    }
+
+    return {
+      node_id: nodeId,
+      categories,
+    };
+  }
+
+  /**
+   * Get a specific category applied to a node
+   */
+  async getCategory(nodeId: number, categoryId: number, includeMetadata: boolean = false): Promise<CategoryWithValues | null> {
+    const params = includeMetadata ? '?metadata' : '';
+    const response = await this.request<any>('GET', `/v2/nodes/${nodeId}/categories/${categoryId}/${params}`);
+
+    const results = response.results || [];
+    if (results.length === 0) return null;
+
+    const data = results[0]?.data || results[0];
+    const catData = data.categories?.[categoryId] || data;
+
+    const attributes: CategoryWithValues['attributes'] = [];
+
+    // Extract attributes
+    for (const [attrKey, attrValue] of Object.entries(catData)) {
+      if (attrKey !== 'name' && !attrKey.endsWith('_name')) {
+        attributes.push({
+          key: attrKey,
+          name: attrKey,
+          type: typeof attrValue === 'object' ? 'object' : typeof attrValue,
+          value: attrValue,
+        });
+      }
+    }
+
+    return {
+      id: categoryId,
+      name: catData.name || `Category ${categoryId}`,
+      attributes,
+    };
+  }
+
+  /**
+   * Add a category to a node with optional attribute values
+   * Values should be keyed as: {category_id}_{attribute_id}
+   */
+  async addCategory(nodeId: number, categoryId: number, values?: CategoryValues): Promise<{ success: boolean; category_id: number }> {
+    const formData = new URLSearchParams();
+    formData.append('category_id', categoryId.toString());
+
+    // Add attribute values if provided
+    if (values) {
+      for (const [key, value] of Object.entries(values)) {
+        if (value !== undefined && value !== null) {
+          if (Array.isArray(value)) {
+            // Multi-value attribute - send as JSON
+            formData.append(key, JSON.stringify(value));
+          } else if (typeof value === 'object') {
+            formData.append(key, JSON.stringify(value));
+          } else {
+            formData.append(key, String(value));
+          }
+        }
+      }
+    }
+
+    await this.request<any>('POST', `/v2/nodes/${nodeId}/categories`, undefined, formData);
+
+    return {
+      success: true,
+      category_id: categoryId,
+    };
+  }
+
+  /**
+   * Update category values on a node
+   * Values should be keyed as: {category_id}_{attribute_id}
+   */
+  async updateCategory(nodeId: number, categoryId: number, values: CategoryValues): Promise<{ success: boolean }> {
+    const formData = new URLSearchParams();
+
+    // Add attribute values
+    for (const [key, value] of Object.entries(values)) {
+      if (value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          formData.append(key, JSON.stringify(value));
+        } else if (typeof value === 'object') {
+          formData.append(key, JSON.stringify(value));
+        } else {
+          formData.append(key, String(value));
+        }
+      }
+    }
+
+    await this.request<any>('PUT', `/v2/nodes/${nodeId}/categories/${categoryId}/`, undefined, formData);
+
+    return { success: true };
+  }
+
+  /**
+   * Remove a category from a node
+   */
+  async removeCategory(nodeId: number, categoryId: number): Promise<{ success: boolean }> {
+    await this.request<void>('DELETE', `/v2/nodes/${nodeId}/categories/${categoryId}/`);
+    return { success: true };
+  }
+
+  /**
+   * Get the form schema for adding a category to a node
+   * Returns the Alpaca form with field definitions
+   */
+  async getCategoryCreateForm(nodeId: number, categoryId: number): Promise<CategoryFormSchema> {
+    const response = await this.request<any>(
+      'GET',
+      `/v1/forms/nodes/categories/create?id=${nodeId}&category_id=${categoryId}`
+    );
+
+    const attributes = this.extractCategoryAttributes(response);
+
+    return {
+      category_id: categoryId,
+      category_name: response.data?.name || `Category ${categoryId}`,
+      attributes,
+    };
+  }
+
+  /**
+   * Get the form schema for updating a category on a node
+   * Returns the Alpaca form with current values and field definitions
+   */
+  async getCategoryUpdateForm(nodeId: number, categoryId: number): Promise<CategoryFormSchema> {
+    const response = await this.request<any>(
+      'GET',
+      `/v1/forms/nodes/categories/update?id=${nodeId}&category_id=${categoryId}`
+    );
+
+    const attributes = this.extractCategoryAttributes(response);
+
+    return {
+      category_id: categoryId,
+      category_name: response.data?.name || `Category ${categoryId}`,
+      attributes,
+    };
+  }
+
+  /**
+   * Get the metadata update form for a business workspace
+   * Returns form schema for all workspace categories
+   */
+  async getWorkspaceMetadataForm(workspaceId: number): Promise<WorkspaceMetadataFormSchema> {
+    const response = await this.request<any>(
+      'GET',
+      `/v2/forms/businessworkspaces/${workspaceId}/metadata/update`
+    );
+
+    const categories: CategoryFormSchema[] = [];
+    const forms = response.forms || [];
+
+    for (const form of forms) {
+      if (form.schema?.properties) {
+        // Each form represents a category
+        const catId = form.data?.id || 0;
+        const catName = form.data?.name || form.options?.form?.attributes?.name || 'Unknown';
+        const attributes = this.extractCategoryAttributes({ forms: [form] });
+
+        categories.push({
+          category_id: catId,
+          category_name: catName,
+          attributes,
+        });
+      }
+    }
+
+    return {
+      workspace_id: workspaceId,
+      categories,
+    };
+  }
+
+  /**
+   * Update workspace metadata (business properties)
+   * Combines getting the form schema and updating values
+   */
+  async updateWorkspaceMetadata(workspaceId: number, values: Record<string, unknown>): Promise<{ success: boolean }> {
+    // For workspace metadata updates, we use the node categories API
+    // The workspace node itself has categories that represent business properties
+
+    // Get current categories to find which ones need updating
+    const categoriesResponse = await this.getCategories(workspaceId);
+
+    // Update each category that has matching keys in values
+    for (const category of categoriesResponse.categories) {
+      const categoryPrefix = `${category.id}_`;
+      const categoryValues: CategoryValues = {};
+      let hasValues = false;
+
+      for (const [key, value] of Object.entries(values)) {
+        if (key.startsWith(categoryPrefix)) {
+          categoryValues[key] = value;
+          hasValues = true;
+        }
+      }
+
+      if (hasValues) {
+        await this.updateCategory(workspaceId, category.id, categoryValues);
+      }
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Helper to extract category attributes from Alpaca form response
+   */
+  private extractCategoryAttributes(response: any): CategoryAttribute[] {
+    const attributes: CategoryAttribute[] = [];
+    const forms = response.forms || [];
+
+    for (const form of forms) {
+      if (form.schema?.properties) {
+        const props = form.schema.properties;
+        const fieldOptions = form.options?.fields || {};
+        const requiredFields = form.schema.required || [];
+
+        for (const [key, prop] of Object.entries(props as Record<string, any>)) {
+          const fieldOpts = fieldOptions[key] || {};
+
+          const attr: CategoryAttribute = {
+            key,
+            name: fieldOpts.label || prop.title || key,
+            type: prop.type || 'string',
+            type_name: prop.format || prop.type,
+            required: requiredFields.includes(key),
+            multi_value: prop.type === 'array',
+            read_only: prop.readonly || fieldOpts.readonly,
+            hidden: fieldOpts.hidden,
+            description: fieldOpts.helper || prop.description,
+          };
+
+          if (prop.maxLength) attr.max_length = prop.maxLength;
+          if (prop.minimum !== undefined) attr.min_value = prop.minimum;
+          if (prop.maximum !== undefined) attr.max_value = prop.maximum;
+          if (prop.default !== undefined) attr.default_value = prop.default;
+
+          // Handle enum/select options
+          if (prop.enum || fieldOpts.optionLabels) {
+            attr.valid_values = (prop.enum || []).map((val: string, idx: number) => ({
+              key: val,
+              value: fieldOpts.optionLabels?.[idx] || val,
+            }));
+          }
+
+          attributes.push(attr);
+        }
+      }
+    }
+
+    return attributes;
   }
 
   // ============ Utility Methods ============

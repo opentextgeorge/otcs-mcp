@@ -13,10 +13,11 @@ An MCP (Model Context Protocol) server for OpenText Content Server that enables 
 | 1. Foundation | ✅ Complete | 17 tools |
 | 2. Business Workspaces | ✅ Complete | 14 tools |
 | 3. Workflow & Assignments | ✅ Complete | 13 tools |
-| 4. Metadata & Categories | Planned | - |
+| 3a. Workflow Forms & Attributes | ✅ Complete | 6 tools |
+| 4. Metadata & Categories | ✅ Complete | 8 tools |
 | 5-8. Advanced Features | Planned | - |
 
-**Total: 44 MCP tools implemented**
+**Total: 58 MCP tools implemented**
 
 ## Features
 
@@ -88,10 +89,50 @@ An MCP (Model Context Protocol) server for OpenText Content Server that enables 
 - `otcs_start_workflow` - Start workflow with disabled start step
 
 #### Task Actions
-- `otcs_send_workflow_task` - Execute task action (SendOn, Delegate, SendForReview)
+- `otcs_send_workflow_task` - Execute task action (SendOn, Delegate, SendForReview, Reply)
 - `otcs_update_workflow_status` - Change process status (suspend, resume, stop, archive)
 - `otcs_delete_workflow` - Delete a workflow instance
 - `otcs_get_workflow_form` - Get workflow task form schema
+
+### Phase 3a: Workflow Forms & Attributes ✅
+
+#### Form Schema Discovery
+- `otcs_get_workflow_task_form_full` - Get complete Alpaca form schema for running task
+- `otcs_get_draft_workflow_form` - Get form schema for draft workflow
+- `otcs_get_workflow_info_full` - Get comprehensive workflow details (forms, attributes, comments)
+
+#### Form Updates & Task Actions
+- `otcs_update_draft_workflow_form` - Update form values or initiate workflow
+- `otcs_accept_workflow_task` - Accept a group-assigned task
+- `otcs_check_group_assignment` - Check if task requires acceptance
+
+**Workflow Form Field Naming:**
+| Field Type | Format | Example |
+|------------|--------|---------|
+| Title | `WorkflowForm_Title` | `"New Title"` |
+| Due Date | `WorkflowForm_WorkflowDueDate` | `"2024-12-31 23:59:59.000"` |
+| Simple Attribute | `WorkflowForm_{id}` | `WorkflowForm_10` |
+| Form Attribute | `WorkflowForm_{type}x{subtype}x{formid}x{fieldid}` | `WorkflowForm_1x4x1x3` |
+
+### Phase 4: Metadata & Categories ✅
+
+#### Category Operations
+- `otcs_get_categories` - Get all categories applied to a node
+- `otcs_get_category` - Get a specific category with values
+- `otcs_add_category` - Apply a category to a node
+- `otcs_update_category` - Update category attribute values
+- `otcs_remove_category` - Remove a category from a node
+
+#### Category Forms
+- `otcs_get_category_form` - Get form schema for a category (create/update)
+- `otcs_get_workspace_metadata_form` - Get workspace business properties form
+- `otcs_update_workspace_metadata` - Update workspace metadata/business properties
+
+**Category Attribute Key Format:**
+| Format | Description | Example |
+|--------|-------------|---------|
+| `{cat_id}_{attr_id}` | Simple attribute | `9830_2` |
+| `{cat_id}_{set_id}_{row}_{attr_id}` | Set attribute | `9830_1_1_5` |
 
 ### Coming Soon: Records Management (Phase 6-7)
 
@@ -326,6 +367,92 @@ Tool: otcs_send_workflow_task(
 )
 ```
 
+### Complete Task with Form Data
+
+```
+Agent: Set the approval date and send on the task
+
+1. otcs_get_workflow_task_form_full(
+     process_id=8001, subprocess_id=8001, task_id=1
+   )
+   → Returns form schema with field names like WorkflowForm_10
+
+2. otcs_send_workflow_task(
+     process_id=8001,
+     subprocess_id=8001,
+     task_id=1,
+     action="SendOn",
+     comment="Approved with date",
+     form_data={"WorkflowForm_10": "01/15/2024"}
+   )
+```
+
+### Get and Update Document Categories
+
+```
+Agent: Show me the metadata categories on this document
+
+Tool: otcs_get_categories(node_id=12345)
+→ Returns list of categories with attribute values
+
+Agent: Update the Status attribute in category 9830
+
+1. otcs_get_category_form(node_id=12345, category_id=9830, mode="update")
+   → Returns form schema with attribute keys like 9830_2
+
+2. otcs_update_category(
+     node_id=12345,
+     category_id=9830,
+     values={"9830_2": "Approved", "9830_5": "2024-01-15"}
+   )
+```
+
+### Add a Category to a Document
+
+```
+Agent: Apply the Contract Metadata category to this document
+
+1. otcs_get_category_form(node_id=12345, category_id=9830, mode="create")
+   → Returns form schema showing required and optional attributes
+
+2. otcs_add_category(
+     node_id=12345,
+     category_id=9830,
+     values={
+       "9830_1": "Contract ABC-123",
+       "9830_2": "Active",
+       "9830_3": "2024-12-31"
+     }
+   )
+```
+
+### Initiate Workflow with Form Values
+
+```
+Agent: Start Document Approval with due date set to end of month
+
+1. otcs_create_draft_workflow(workflow_id=5000, doc_ids="12345")
+   → Returns draftprocess_id=9001
+
+2. otcs_get_draft_workflow_form(draftprocess_id=9001)
+   → Returns form schema with available fields
+
+3. otcs_update_draft_workflow_form(
+     draftprocess_id=9001,
+     action="formUpdate",
+     values={
+       "WorkflowForm_Title": "Contract Approval - Acme",
+       "WorkflowForm_WorkflowDueDate": "2024-01-31 17:00:00.000"
+     }
+   )
+
+4. otcs_update_draft_workflow_form(
+     draftprocess_id=9001,
+     action="Initiate",
+     comment="Starting approval"
+   )
+```
+
 ## Development
 
 ```bash
@@ -381,12 +508,20 @@ src/
 - Task actions (SendOn, Delegate, Review)
 - Workflow status and activity tracking
 
-### Phase 4: Metadata & Categories (Next)
-- Category operations (add, update, remove)
-- Form schema retrieval
-- Bulk metadata updates
+### Phase 3a: Workflow Forms & Attributes ✅
+- Get workflow task form schema (Alpaca forms)
+- Get draft workflow form schema
+- Update draft workflow form values (formUpdate action)
+- Get comprehensive workflow info (forms, attributes, comments)
+- Accept group-assigned workflow tasks
+- Workflow form field naming convention support
 
-### Phase 5: Permissions & Advanced
+### Phase 4: Metadata & Categories ✅
+- Category operations (add, update, remove)
+- Form schema retrieval for categories
+- Workspace metadata/business properties updates
+
+### Phase 5: Permissions & Advanced (Next)
 - Permission management
 - Document reservations
 - Large file uploads

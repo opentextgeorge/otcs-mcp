@@ -142,8 +142,126 @@ async function runTests() {
     }
   }
 
-  // Test 9: Logout
-  console.log('\nTest 9: Logout');
+  // Test 9: Workflow Assignments
+  console.log('\nTest 9: Workflow Assignments');
+  try {
+    const assignments = await client.getAssignments();
+    console.log(`  ✓ Retrieved workflow assignments:`);
+    console.log(`    Total: ${assignments.length}`);
+    if (assignments.length > 0) {
+      console.log('    First assignments:');
+      for (const a of assignments.slice(0, 3)) {
+        console.log(`      - ${a.name} (ID: ${a.workflow_id}/${a.workflow_subworkflow_id}/${a.workflow_subworkflow_task_id})`);
+        console.log(`        Priority: ${a.priority_name}, Status: ${a.status_name}`);
+      }
+
+      // Test 10: Get Workflow Form for first assignment
+      console.log('\nTest 10: Workflow Task Form (Full)');
+      const firstAssignment = assignments[0];
+      try {
+        const formFull = await client.getWorkflowTaskFormFull(
+          firstAssignment.workflow_id,
+          firstAssignment.workflow_subworkflow_id,
+          firstAssignment.workflow_subworkflow_task_id
+        );
+        console.log(`  ✓ Retrieved full form schema:`);
+        console.log(`    Title: ${formFull.data.title}`);
+        console.log(`    Instructions: ${formFull.data.instructions?.substring(0, 50) || 'None'}...`);
+        console.log(`    Comments enabled: ${formFull.data.comments_on}`);
+        console.log(`    Actions: ${formFull.data.actions?.map(a => a.key).join(', ') || 'None'}`);
+        console.log(`    Custom actions: ${formFull.data.custom_actions?.map(a => a.key).join(', ') || 'None'}`);
+        console.log(`    Form count: ${formFull.forms.length}`);
+        if (formFull.forms.length > 0 && formFull.forms[0].schema?.properties) {
+          const fieldKeys = Object.keys(formFull.forms[0].schema.properties);
+          console.log(`    Form fields: ${fieldKeys.slice(0, 5).join(', ')}${fieldKeys.length > 5 ? '...' : ''}`);
+        }
+      } catch (error) {
+        console.log(`  ✗ Failed to get workflow form: ${error}`);
+      }
+
+      // Test 11: Get Workflow Info Full
+      console.log('\nTest 11: Workflow Info Full');
+      try {
+        const info = await client.getWorkflowInfoFull(firstAssignment.workflow_id);
+        console.log(`  ✓ Retrieved workflow info:`);
+        console.log(`    Work ID: ${info.work_id}`);
+        console.log(`    Title: ${info.title}`);
+        console.log(`    Status: ${info.status}`);
+        console.log(`    Steps: ${info.steps?.length || 0}`);
+        console.log(`    Comments: ${info.comments?.length || 0}`);
+        console.log(`    Attributes: ${Object.keys(info.attributes || {}).length} fields`);
+      } catch (error) {
+        console.log(`  ✗ Failed to get workflow info: ${error}`);
+      }
+
+      // Test 12: Check Group Assignment
+      console.log('\nTest 12: Check Group Assignment');
+      try {
+        const isGroup = await client.checkGroupAssignment(
+          firstAssignment.workflow_id,
+          firstAssignment.workflow_subworkflow_id,
+          firstAssignment.workflow_subworkflow_task_id
+        );
+        console.log(`  ✓ Group assignment check:`);
+        console.log(`    Is group assignment: ${isGroup}`);
+      } catch (error) {
+        console.log(`  ✗ Failed to check group assignment: ${error}`);
+      }
+    } else {
+      console.log('    No assignments found - skipping workflow form tests');
+    }
+  } catch (error) {
+    console.log(`  ✗ Failed to get assignments: ${error}`);
+  }
+
+  // Test 13: Get Categories on a node
+  console.log('\nTest 13: Get Categories');
+  try {
+    // Get categories on Enterprise Workspace (ID 2000)
+    const categories = await client.getCategories(2000);
+    console.log(`  ✓ Retrieved categories:`);
+    console.log(`    Node ID: ${categories.node_id}`);
+    console.log(`    Category count: ${categories.categories.length}`);
+    if (categories.categories.length > 0) {
+      console.log('    Categories:');
+      categories.categories.slice(0, 3).forEach(cat => {
+        console.log(`      - ${cat.name} (ID: ${cat.id}, Attributes: ${cat.attributes.length})`);
+      });
+    }
+  } catch (error) {
+    console.log(`  ✗ Failed to get categories: ${error}`);
+  }
+
+  // Test 14: Workspace metadata form
+  console.log('\nTest 14: Workspace Metadata Form');
+  try {
+    // First, search for a business workspace
+    const workspaces = await client.searchWorkspaces({ limit: 1 });
+    if (workspaces.results.length > 0) {
+      const ws = workspaces.results[0];
+      console.log(`  Found workspace: ${ws.name} (ID: ${ws.id})`);
+
+      try {
+        const metadataForm = await client.getWorkspaceMetadataForm(ws.id);
+        console.log(`  ✓ Retrieved workspace metadata form:`);
+        console.log(`    Categories: ${metadataForm.categories.length}`);
+        if (metadataForm.categories.length > 0) {
+          metadataForm.categories.slice(0, 2).forEach(cat => {
+            console.log(`      - ${cat.category_name}: ${cat.attributes.length} attributes`);
+          });
+        }
+      } catch (error) {
+        console.log(`  ! Workspace metadata form skipped: ${error}`);
+      }
+    } else {
+      console.log('  No business workspaces found - skipping metadata form test');
+    }
+  } catch (error) {
+    console.log(`  ✗ Workspace search failed: ${error}`);
+  }
+
+  // Test 15: Logout
+  console.log('\nTest 15: Logout');
   try {
     await client.logout();
     console.log(`  ✓ Logged out successfully`);

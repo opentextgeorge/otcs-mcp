@@ -903,6 +903,290 @@ const tools: Tool[] = [
       required: ['process_id', 'subprocess_id', 'task_id'],
     },
   },
+  // ============ Workflow Forms & Attributes Tools ============
+  {
+    name: 'otcs_get_workflow_task_form_full',
+    description: 'Get the complete Alpaca form schema for a workflow task including field definitions, data types, and current values. Use this to discover WorkflowForm_* field names for form updates.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        process_id: {
+          type: 'number',
+          description: 'The workflow instance/process ID',
+        },
+        subprocess_id: {
+          type: 'number',
+          description: 'The subprocess ID',
+        },
+        task_id: {
+          type: 'number',
+          description: 'The task ID',
+        },
+      },
+      required: ['process_id', 'subprocess_id', 'task_id'],
+    },
+  },
+  {
+    name: 'otcs_get_draft_workflow_form',
+    description: 'Get the form schema for a draft workflow before initiation, including all form fields that can be set.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draftprocess_id: {
+          type: 'number',
+          description: 'The draft process ID returned from otcs_create_draft_workflow',
+        },
+      },
+      required: ['draftprocess_id'],
+    },
+  },
+  {
+    name: 'otcs_update_draft_workflow_form',
+    description: 'Update form values on a draft workflow or initiate the workflow. Use action="formUpdate" to set field values, action="Initiate" to start the workflow.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draftprocess_id: {
+          type: 'number',
+          description: 'The draft process ID',
+        },
+        action: {
+          type: 'string',
+          enum: ['formUpdate', 'Initiate'],
+          description: 'formUpdate to set form values, Initiate to start the workflow',
+        },
+        comment: {
+          type: 'string',
+          description: 'Optional comment (used with Initiate action)',
+        },
+        values: {
+          type: 'object',
+          description: 'Form field values to update. Keys are field names like WorkflowForm_Title, WorkflowForm_10, WorkflowForm_1x4x1x2 etc.',
+        },
+      },
+      required: ['draftprocess_id', 'action'],
+    },
+  },
+  {
+    name: 'otcs_get_workflow_info_full',
+    description: 'Get comprehensive workflow information including attributes, comments, step history, and managers.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        work_id: {
+          type: 'number',
+          description: 'The workflow instance ID (work_id)',
+        },
+      },
+      required: ['work_id'],
+    },
+  },
+  {
+    name: 'otcs_accept_workflow_task',
+    description: 'Accept a group-assigned workflow task to take ownership of it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        process_id: {
+          type: 'number',
+          description: 'The workflow instance/process ID',
+        },
+        subprocess_id: {
+          type: 'number',
+          description: 'The subprocess ID',
+        },
+        task_id: {
+          type: 'number',
+          description: 'The task ID',
+        },
+      },
+      required: ['process_id', 'subprocess_id', 'task_id'],
+    },
+  },
+  {
+    name: 'otcs_check_group_assignment',
+    description: 'Check if a workflow task is assigned to a group (requires acceptance before working on it).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        process_id: {
+          type: 'number',
+          description: 'The workflow instance/process ID',
+        },
+        subprocess_id: {
+          type: 'number',
+          description: 'The subprocess ID',
+        },
+        task_id: {
+          type: 'number',
+          description: 'The task ID',
+        },
+      },
+      required: ['process_id', 'subprocess_id', 'task_id'],
+    },
+  },
+
+  // ============ Category & Metadata Tools ============
+  {
+    name: 'otcs_get_categories',
+    description: 'Get all categories (metadata templates) applied to a node with their current attribute values.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node_id: {
+          type: 'number',
+          description: 'The ID of the node (document, folder, workspace, etc.)',
+        },
+        include_metadata: {
+          type: 'boolean',
+          description: 'Include detailed metadata about attribute types and constraints',
+          default: false,
+        },
+      },
+      required: ['node_id'],
+    },
+  },
+  {
+    name: 'otcs_get_category',
+    description: 'Get a specific category applied to a node with its attribute values.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node_id: {
+          type: 'number',
+          description: 'The ID of the node',
+        },
+        category_id: {
+          type: 'number',
+          description: 'The ID of the category to retrieve',
+        },
+        include_metadata: {
+          type: 'boolean',
+          description: 'Include detailed metadata about attribute types',
+          default: false,
+        },
+      },
+      required: ['node_id', 'category_id'],
+    },
+  },
+  {
+    name: 'otcs_add_category',
+    description: 'Apply a category to a node with optional initial attribute values. Use otcs_get_category_form to discover available attributes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node_id: {
+          type: 'number',
+          description: 'The ID of the node to add the category to',
+        },
+        category_id: {
+          type: 'number',
+          description: 'The ID of the category to apply',
+        },
+        values: {
+          type: 'object',
+          description: 'Optional attribute values. Keys should be formatted as {category_id}_{attribute_id} (e.g., "9830_2": "value")',
+        },
+      },
+      required: ['node_id', 'category_id'],
+    },
+  },
+  {
+    name: 'otcs_update_category',
+    description: 'Update attribute values for a category already applied to a node.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node_id: {
+          type: 'number',
+          description: 'The ID of the node',
+        },
+        category_id: {
+          type: 'number',
+          description: 'The ID of the category to update',
+        },
+        values: {
+          type: 'object',
+          description: 'Attribute values to update. Keys should be formatted as {category_id}_{attribute_id} (e.g., "9830_2": "new value")',
+        },
+      },
+      required: ['node_id', 'category_id', 'values'],
+    },
+  },
+  {
+    name: 'otcs_remove_category',
+    description: 'Remove a category from a node.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node_id: {
+          type: 'number',
+          description: 'The ID of the node',
+        },
+        category_id: {
+          type: 'number',
+          description: 'The ID of the category to remove',
+        },
+      },
+      required: ['node_id', 'category_id'],
+    },
+  },
+  {
+    name: 'otcs_get_category_form',
+    description: 'Get the form schema for a category, showing available attributes with their types, constraints, and valid values. Use this before adding or updating a category.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node_id: {
+          type: 'number',
+          description: 'The ID of the node',
+        },
+        category_id: {
+          type: 'number',
+          description: 'The ID of the category',
+        },
+        mode: {
+          type: 'string',
+          enum: ['create', 'update'],
+          description: 'Whether to get the form for creating (adding) or updating the category',
+          default: 'create',
+        },
+      },
+      required: ['node_id', 'category_id'],
+    },
+  },
+  {
+    name: 'otcs_get_workspace_metadata_form',
+    description: 'Get the metadata form schema for a business workspace, showing all available business properties/categories and their attributes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspace_id: {
+          type: 'number',
+          description: 'The ID of the business workspace',
+        },
+      },
+      required: ['workspace_id'],
+    },
+  },
+  {
+    name: 'otcs_update_workspace_metadata',
+    description: 'Update business properties/metadata for a workspace. Values are keyed by {category_id}_{attribute_id}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspace_id: {
+          type: 'number',
+          description: 'The ID of the business workspace',
+        },
+        values: {
+          type: 'object',
+          description: 'Attribute values to update, keyed as {category_id}_{attribute_id}',
+        },
+      },
+      required: ['workspace_id', 'values'],
+    },
+  },
 ];
 
 // ============ Tool Handler ============
@@ -1574,6 +1858,279 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         form,
         available_actions: form.actions?.map(a => a.key) || [],
         custom_actions: form.custom_actions?.map(a => a.key) || [],
+      };
+    }
+
+    // ============ Workflow Forms & Attributes Handlers ============
+
+    case 'otcs_get_workflow_task_form_full': {
+      const { process_id, subprocess_id, task_id } = args as {
+        process_id: number;
+        subprocess_id: number;
+        task_id: number;
+      };
+
+      const formInfo = await client.getWorkflowTaskFormFull(process_id, subprocess_id, task_id);
+
+      // Extract field names and types from the Alpaca forms for easier agent use
+      const fields: Record<string, { type: string; label?: string; required?: boolean; readonly?: boolean }> = {};
+      for (const form of formInfo.forms) {
+        if (form.schema?.properties) {
+          for (const [key, prop] of Object.entries(form.schema.properties)) {
+            fields[key] = {
+              type: prop.type || 'string',
+              label: form.options?.fields?.[key]?.label,
+              required: form.schema.required?.includes(key),
+              readonly: prop.readonly || form.options?.fields?.[key]?.readonly,
+            };
+          }
+        }
+      }
+
+      return {
+        title: formInfo.data.title,
+        instructions: formInfo.data.instructions,
+        priority: formInfo.data.priority,
+        comments_enabled: formInfo.data.comments_on,
+        attachments_enabled: formInfo.data.attachments_on,
+        requires_accept: formInfo.data.member_accept,
+        requires_authentication: formInfo.data.authentication,
+        actions: formInfo.data.actions?.map(a => ({ key: a.key, label: a.label })) || [],
+        custom_actions: formInfo.data.custom_actions?.map(a => ({ key: a.key, label: a.label })) || [],
+        fields,
+        form_count: formInfo.forms.length,
+        raw_forms: formInfo.forms, // Include raw forms for detailed inspection
+      };
+    }
+
+    case 'otcs_get_draft_workflow_form': {
+      const { draftprocess_id } = args as { draftprocess_id: number };
+
+      const formInfo = await client.getDraftWorkflowForm(draftprocess_id);
+
+      // Extract field names and types from the Alpaca forms
+      const fields: Record<string, { type: string; label?: string; required?: boolean; current_value?: unknown }> = {};
+      for (const form of formInfo.forms) {
+        if (form.schema?.properties) {
+          for (const [key, prop] of Object.entries(form.schema.properties)) {
+            fields[key] = {
+              type: prop.type || 'string',
+              label: form.options?.fields?.[key]?.label,
+              required: form.schema.required?.includes(key),
+              current_value: form.data?.[key],
+            };
+          }
+        }
+      }
+
+      return {
+        title: formInfo.data.title,
+        instructions: formInfo.data.instructions,
+        fields,
+        form_count: formInfo.forms.length,
+        raw_forms: formInfo.forms,
+      };
+    }
+
+    case 'otcs_update_draft_workflow_form': {
+      const { draftprocess_id, action, comment, values } = args as {
+        draftprocess_id: number;
+        action: 'formUpdate' | 'Initiate';
+        comment?: string;
+        values?: Record<string, unknown>;
+      };
+
+      await client.updateDraftWorkflowForm({
+        draftprocess_id,
+        action,
+        comment,
+        values,
+      });
+
+      return {
+        success: true,
+        message: action === 'Initiate'
+          ? `Workflow initiated from draft ${draftprocess_id}`
+          : `Form values updated for draft ${draftprocess_id}`,
+        action,
+        values_updated: values ? Object.keys(values) : [],
+      };
+    }
+
+    case 'otcs_get_workflow_info_full': {
+      const { work_id } = args as { work_id: number };
+
+      const info = await client.getWorkflowInfoFull(work_id);
+      return info;
+    }
+
+    case 'otcs_accept_workflow_task': {
+      const { process_id, subprocess_id, task_id } = args as {
+        process_id: number;
+        subprocess_id: number;
+        task_id: number;
+      };
+
+      const result = await client.acceptWorkflowTask(process_id, subprocess_id, task_id);
+      return {
+        success: result.success,
+        message: result.message || 'Task accepted successfully',
+        task_id,
+        process_id,
+      };
+    }
+
+    case 'otcs_check_group_assignment': {
+      const { process_id, subprocess_id, task_id } = args as {
+        process_id: number;
+        subprocess_id: number;
+        task_id: number;
+      };
+
+      const isGroupAssignment = await client.checkGroupAssignment(process_id, subprocess_id, task_id);
+      return {
+        is_group_assignment: isGroupAssignment,
+        requires_accept: isGroupAssignment,
+        message: isGroupAssignment
+          ? 'This task is assigned to a group. Use otcs_accept_workflow_task to accept it before working on it.'
+          : 'This task is assigned to you individually.',
+      };
+    }
+
+    // ============ Category & Metadata Handlers ============
+
+    case 'otcs_get_categories': {
+      const { node_id, include_metadata } = args as {
+        node_id: number;
+        include_metadata?: boolean;
+      };
+
+      const result = await client.getCategories(node_id, include_metadata);
+      return {
+        ...result,
+        category_count: result.categories.length,
+        message: result.categories.length > 0
+          ? `Found ${result.categories.length} category(ies) on node ${node_id}`
+          : `No categories applied to node ${node_id}`,
+      };
+    }
+
+    case 'otcs_get_category': {
+      const { node_id, category_id, include_metadata } = args as {
+        node_id: number;
+        category_id: number;
+        include_metadata?: boolean;
+      };
+
+      const category = await client.getCategory(node_id, category_id, include_metadata);
+      if (!category) {
+        return {
+          found: false,
+          message: `Category ${category_id} not found on node ${node_id}`,
+        };
+      }
+
+      return {
+        found: true,
+        category,
+        attribute_count: category.attributes.length,
+      };
+    }
+
+    case 'otcs_add_category': {
+      const { node_id, category_id, values } = args as {
+        node_id: number;
+        category_id: number;
+        values?: Record<string, unknown>;
+      };
+
+      const result = await client.addCategory(node_id, category_id, values);
+      return {
+        ...result,
+        message: `Category ${category_id} added to node ${node_id}`,
+        values_set: values ? Object.keys(values) : [],
+      };
+    }
+
+    case 'otcs_update_category': {
+      const { node_id, category_id, values } = args as {
+        node_id: number;
+        category_id: number;
+        values: Record<string, unknown>;
+      };
+
+      const result = await client.updateCategory(node_id, category_id, values);
+      return {
+        ...result,
+        message: `Category ${category_id} updated on node ${node_id}`,
+        values_updated: Object.keys(values),
+      };
+    }
+
+    case 'otcs_remove_category': {
+      const { node_id, category_id } = args as {
+        node_id: number;
+        category_id: number;
+      };
+
+      const result = await client.removeCategory(node_id, category_id);
+      return {
+        ...result,
+        message: `Category ${category_id} removed from node ${node_id}`,
+      };
+    }
+
+    case 'otcs_get_category_form': {
+      const { node_id, category_id, mode } = args as {
+        node_id: number;
+        category_id: number;
+        mode?: 'create' | 'update';
+      };
+
+      const formMode = mode || 'create';
+      const form = formMode === 'update'
+        ? await client.getCategoryUpdateForm(node_id, category_id)
+        : await client.getCategoryCreateForm(node_id, category_id);
+
+      return {
+        form,
+        attribute_count: form.attributes.length,
+        required_attributes: form.attributes.filter(a => a.required).map(a => a.key),
+        message: `Retrieved ${formMode} form for category ${category_id}`,
+      };
+    }
+
+    case 'otcs_get_workspace_metadata_form': {
+      const { workspace_id } = args as { workspace_id: number };
+
+      const form = await client.getWorkspaceMetadataForm(workspace_id);
+
+      // Count total attributes across all categories
+      const totalAttributes = form.categories.reduce((sum, cat) => sum + cat.attributes.length, 0);
+
+      return {
+        form,
+        category_count: form.categories.length,
+        total_attributes: totalAttributes,
+        categories_summary: form.categories.map(c => ({
+          id: c.category_id,
+          name: c.category_name,
+          attribute_count: c.attributes.length,
+        })),
+      };
+    }
+
+    case 'otcs_update_workspace_metadata': {
+      const { workspace_id, values } = args as {
+        workspace_id: number;
+        values: Record<string, unknown>;
+      };
+
+      const result = await client.updateWorkspaceMetadata(workspace_id, values);
+      return {
+        ...result,
+        message: `Workspace ${workspace_id} metadata updated`,
+        values_updated: Object.keys(values),
       };
     }
 
