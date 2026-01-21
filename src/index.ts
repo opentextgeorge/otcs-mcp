@@ -151,13 +151,57 @@ const allTools: Tool[] = [
   },
   {
     name: 'otcs_search',
-    description: 'Search for nodes by name.',
+    description: `Enterprise search across the repository. Searches document content, names, descriptions, and metadata. Supports full-text search, exact phrases, and advanced query syntax.
+
+**LQL Query Examples (use mode: "complexquery"):**
+- Wildcards: "OTName:contract*" (names starting with contract), "OTName:*report*" (names containing report)
+- Field queries: "OTName:invoice AND OTMIMEType:pdf" (PDF files named invoice)
+- Date ranges: "OTObjectDate:[2024-01-01 TO 2024-12-31]" (items from 2024)
+- Combined: "budget OTName:*.xlsx" (Excel files with "budget" in content)
+
+**Filter Types:** Use filter_type to restrict results to specific object types (documents, folders, workspaces, workflows).`,
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search query' },
-        location_id: { type: 'number', description: 'Optional folder ID to search within' },
-        limit: { type: 'number', description: 'Max results (default: 50)' },
+        query: {
+          type: 'string',
+          description: 'Search query. Supports: keywords (budget report), exact phrases ("quarterly report"), wildcards (contract*, *report*), and field queries (OTName:contract*). Multiple terms are ANDed by default.'
+        },
+        filter_type: {
+          type: 'string',
+          enum: ['all', 'documents', 'folders', 'workspaces', 'workflows'],
+          description: 'Filter results by object type: all (default), documents (files only), folders, workspaces (business workspaces), workflows'
+        },
+        mode: {
+          type: 'string',
+          enum: ['allwords', 'anywords', 'exactphrase', 'complexquery'],
+          description: 'Search mode: allwords (default, all terms must match), anywords (any term matches), exactphrase (exact phrase match), complexquery (LQL syntax for field:value queries)'
+        },
+        search_in: {
+          type: 'string',
+          enum: ['all', 'content', 'metadata'],
+          description: 'Where to search: all (default - content and metadata), content (document body text only), metadata (name, description, attributes only)'
+        },
+        modifier: {
+          type: 'string',
+          enum: ['synonymsof', 'relatedto', 'soundslike', 'wordbeginswith', 'wordendswith'],
+          description: 'Expand search with related terms'
+        },
+        sort: {
+          type: 'string',
+          enum: ['relevance', 'desc_OTObjectDate', 'asc_OTObjectDate', 'desc_OTObjectSize', 'asc_OTObjectSize', 'asc_OTName', 'desc_OTName'],
+          description: 'Sort order (default: relevance)'
+        },
+        include_facets: {
+          type: 'boolean',
+          description: 'Include facets for filtering/drilling down results'
+        },
+        include_highlights: {
+          type: 'boolean',
+          description: 'Include highlighted snippets showing where matches occur'
+        },
+        limit: { type: 'number', description: 'Max results per page (default: 50)' },
+        page: { type: 'number', description: 'Page number for pagination' },
       },
       required: ['query'],
     },
@@ -801,8 +845,30 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     }
 
     case 'otcs_search': {
-      const { query, location_id, limit } = args as { query: string; location_id?: number; limit?: number };
-      return await client.searchNodes(query, { location: location_id, limit: limit || 50 });
+      const params = args as {
+        query: string;
+        filter_type?: 'all' | 'documents' | 'folders' | 'workspaces' | 'workflows';
+        mode?: 'allwords' | 'anywords' | 'exactphrase' | 'complexquery';
+        search_in?: 'all' | 'content' | 'metadata';
+        modifier?: 'synonymsof' | 'relatedto' | 'soundslike' | 'wordbeginswith' | 'wordendswith';
+        sort?: string;
+        include_facets?: boolean;
+        include_highlights?: boolean;
+        limit?: number;
+        page?: number;
+      };
+      return await client.search({
+        query: params.query,
+        filter_type: params.filter_type,
+        lookfor: params.mode,
+        within: params.search_in,
+        modifier: params.modifier,
+        sort: params.sort as any,
+        include_facets: params.include_facets,
+        include_highlights: params.include_highlights,
+        limit: params.limit || 50,
+        page: params.page,
+      });
     }
 
     // ==================== Folders ====================

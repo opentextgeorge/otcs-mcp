@@ -89,6 +89,14 @@ import {
   ShareOperationResponse,
   SharedItem,
   ShareListResponse,
+  // Search types
+  EnterpriseSearchOptions,
+  EnterpriseSearchResult,
+  OTCSSearchResponse,
+  SearchResultNodeInfo,
+  SearchMode,
+  SearchWithinType,
+  SearchSortType,
 } from '../types.js';
 
 export class OTCSClient {
@@ -593,6 +601,115 @@ export class OTCSClient {
 
   // ============ Search Operations ============
 
+  /**
+   * Enterprise search using POST /v2/search
+   * Searches across the entire repository including document content, names, and metadata
+   */
+  async search(options: EnterpriseSearchOptions): Promise<EnterpriseSearchResult> {
+    const params = new URLSearchParams();
+
+    // The query goes in the 'where' parameter
+    params.append('where', options.query);
+
+    // Search mode - defaults to 'allwords' for simple keyword matching
+    params.append('lookfor', options.lookfor || 'allwords');
+
+    // Search scope - defaults to 'all' (content + metadata)
+    params.append('within', options.within || 'all');
+
+    // Type filtering via slice parameter - maps filter_type to OTSubType values
+    if (options.filter_type && options.filter_type !== 'all') {
+      const typeMap: Record<string, number[]> = {
+        documents: [NodeTypes.DOCUMENT],  // 144
+        folders: [NodeTypes.FOLDER],       // 0
+        workspaces: [NodeTypes.BUSINESS_WORKSPACE],  // 848
+        workflows: [NodeTypes.WORKFLOW_MAP],  // 128
+      };
+      const subtypes = typeMap[options.filter_type];
+      if (subtypes && subtypes.length > 0) {
+        // Format: {OTSubType:[144]} or {OTSubType:[0,848]} for multiple types
+        params.append('slice', `{OTSubType:[${subtypes.join(',')}]}`);
+      }
+    }
+
+    // Related terms modifier (optional)
+    if (options.modifier) {
+      params.append('modifier', options.modifier);
+    }
+
+    // Sort order - defaults to relevance
+    if (options.sort) {
+      params.append('sort', options.sort);
+    }
+
+    // Build options array for extra data
+    const extraOptions: string[] = [];
+    if (options.include_facets) {
+      extraOptions.push('"facets"');
+    }
+    if (options.include_highlights) {
+      extraOptions.push('"highlight_summaries"');
+    }
+    if (extraOptions.length > 0) {
+      params.append('options', `{${extraOptions.join(',')}}`);
+    }
+
+    // Pagination
+    if (options.limit) {
+      params.append('limit', options.limit.toString());
+    }
+    if (options.page) {
+      params.append('page', options.page.toString());
+    }
+
+    // Include metadata for field definitions
+    params.append('metadata', 'true');
+
+    const response = await this.request<OTCSSearchResponse>(
+      'POST',
+      '/v2/search',
+      undefined,
+      params
+    );
+
+    // Transform results
+    const items: SearchResultNodeInfo[] = (response.results || []).map(item => {
+      const props = item.data?.properties;
+      if (!props) return null;
+
+      const baseNode = this.transformNode(props as OTCSNode);
+      const searchNode: SearchResultNodeInfo = {
+        ...baseNode,
+      };
+
+      // Add version info if available
+      if (item.data?.versions) {
+        searchNode.version_info = {
+          file_name: item.data.versions.file_name,
+          version_number: item.data.versions.version_number,
+        };
+      }
+
+      return searchNode;
+    }).filter((item): item is SearchResultNodeInfo => item !== null);
+
+    const paging = response.collection?.paging;
+    const searching = response.collection?.searching;
+
+    return {
+      results: items,
+      total_count: paging?.total_count || items.length,
+      page: paging?.page || 1,
+      page_size: paging?.limit || items.length,
+      facets: searching?.facets,
+      cache_id: searching?.cache_id,
+    };
+  }
+
+  /**
+   * Backward-compatible search method that calls the new enterprise search
+   * @deprecated Use search() instead
+   */
   async searchNodes(
     query: string,
     options: {
@@ -602,66 +719,16 @@ export class OTCSClient {
       page?: number;
     } = {}
   ): Promise<{ results: NodeInfo[]; total_count: number }> {
-    // Use browse with filter - searches within a location
-    // Default to Enterprise Workspace (2000) if no location specified
-    const locationId = options.location || 2000;
-
-    const params = new URLSearchParams();
-    params.append('where_name', `contains_${query}`);
-    if (options.limit) params.append('limit', options.limit.toString());
-    if (options.page) params.append('page', options.page.toString());
-
-    const response = await this.request<OTCSNodesResponse>(
-      'GET',
-      `/v2/nodes/${locationId}/nodes?${params.toString()}`
-    );
-
-    const items: NodeInfo[] = (response.results || []).map(item => {
-      const props = item.data?.properties;
-      if (!props) return null;
-      return this.transformNode(props);
-    }).filter((item): item is NodeInfo => item !== null);
+    const result = await this.search({
+      query: query,
+      limit: options.limit || 50,
+      page: options.page,
+    });
 
     return {
-      results: items,
-      total_count: response.collection?.paging?.total_count || items.length,
+      results: result.results,
+      total_count: result.total_count,
     };
-  }
-
-  // Deep search using recursive browse (for searches across nested folders)
-  async deepSearch(
-    query: string,
-    rootId: number = 2000,
-    maxDepth: number = 3
-  ): Promise<NodeInfo[]> {
-    const results: NodeInfo[] = [];
-    const visited = new Set<number>();
-
-    const searchFolder = async (folderId: number, depth: number) => {
-      if (depth > maxDepth || visited.has(folderId)) return;
-      visited.add(folderId);
-
-      try {
-        const contents = await this.getSubnodes(folderId, { limit: 500 });
-
-        for (const item of contents.items) {
-          // Check if name matches query
-          if (item.name.toLowerCase().includes(query.toLowerCase())) {
-            results.push(item);
-          }
-
-          // Recurse into subfolders
-          if (item.container && item.type === NodeTypes.FOLDER) {
-            await searchFolder(item.id, depth + 1);
-          }
-        }
-      } catch (error) {
-        // Skip folders we can't access
-      }
-    };
-
-    await searchFolder(rootId, 0);
-    return results;
   }
 
   // ============ Business Workspace Operations ============
@@ -2918,8 +2985,11 @@ export class OTCSClient {
    */
   async applyRMHoldBatch(nodeIds: number[], holdId: number): Promise<{ success: boolean; count: number }> {
     const formData = new URLSearchParams();
-    formData.append('hold_id', holdId.toString());
-    formData.append('ids', nodeIds.join(','));
+    formData.append('holdID', holdId.toString());
+    // API expects array format - send each id as separate parameter
+    for (const id of nodeIds) {
+      formData.append('ids', id.toString());
+    }
 
     await this.request<any>('POST', `/v1/rmclassifications/applyhold`, undefined, formData);
     return { success: true, count: nodeIds.length };
@@ -2930,8 +3000,11 @@ export class OTCSClient {
    */
   async removeRMHoldBatch(nodeIds: number[], holdId: number): Promise<{ success: boolean; count: number }> {
     const formData = new URLSearchParams();
-    formData.append('hold_id', holdId.toString());
-    formData.append('ids', nodeIds.join(','));
+    formData.append('holdID', holdId.toString());
+    // API expects array format - send each id as separate parameter
+    for (const id of nodeIds) {
+      formData.append('ids', id.toString());
+    }
 
     await this.request<any>('POST', `/v1/rmclassifications/removehold`, undefined, formData);
     return { success: true, count: nodeIds.length };
