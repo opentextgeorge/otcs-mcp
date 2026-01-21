@@ -30,9 +30,9 @@ To optimize for different AI clients, you can select a tool profile:
 | Profile | Tools | Use Case |
 |---------|-------|----------|
 | `core` | 22 | Basic document management + sharing |
-| `workflow` | 31 | Document management + full workflow |
+| `workflow` | 30 | Document management + full workflow |
 | `admin` | 33 | Document management + permissions/admin + RM |
-| `rm` | 23 | Document management + Records Management |
+| `rm` | 22 | Document management + Records Management |
 | `full` | 41 | All tools (default) |
 
 Configure via environment variable:
@@ -50,13 +50,13 @@ OTCS_TOOL_PROFILE=core  # or workflow, admin, rm, full
 | `otcs_session_status` | Check if session is valid |
 | `otcs_logout` | End authenticated session |
 
-### Navigation (3 tools)
+### Navigation & Search (3 tools)
 
 | Tool | Description |
 |------|-------------|
 | `otcs_get_node` | Get node details by ID (with optional path/breadcrumb) |
 | `otcs_browse` | List folder contents with filtering and sorting |
-| `otcs_search` | Search nodes by name |
+| `otcs_search` | Enterprise search with LQL syntax, facets, highlights, and type filtering |
 
 ### Folders & Node Operations (2 tools)
 
@@ -251,6 +251,19 @@ Add to `claude_desktop_config.json`:
 ```
 Agent: Show me what's in the Enterprise Workspace
 Tool: otcs_browse(folder_id=2000)
+```
+
+### Enterprise Search
+
+```
+Agent: Find all PDF documents containing "contract"
+Tool: otcs_search(query="contract", filter_type="documents", mode="allwords")
+
+Agent: Find documents modified in 2024 with "invoice" in the name
+Tool: otcs_search(query='OTName:*invoice* AND OTObjectDate:[2024-01-01 TO 2024-12-31]', mode="complexquery")
+
+Agent: Search for Excel files with "budget" in content
+Tool: otcs_search(query='budget OTName:*.xlsx', mode="complexquery", include_highlights=true)
 ```
 
 ### Create Folder Structure
@@ -467,6 +480,8 @@ otcs-mcp/
 │   ├── ARCHITECTURE_PLAN.md      # Detailed architecture and roadmap
 │   ├── FUTURE-FEATURES.md        # Feature planning and backlog
 │   ├── IMPLEMENTATION-PLAN.md    # Phased development roadmap
+│   ├── CATEGORY-MANAGEMENT-API.md    # Category API usage guide
+│   ├── OTCS-REFERENCE-IDS.md         # Common system IDs reference
 │   ├── content-server-rest-api-2.0.2.yaml                    # Content Server REST API spec
 │   ├── opentext-business-workspaces-rest-api-v1-and-v2.yaml  # Business Workspaces API spec
 │   └── opentext-records-management-26.1.json                 # Records Management API spec
