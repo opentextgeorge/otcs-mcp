@@ -34,6 +34,7 @@ const TOOL_PROFILES: Record<string, string[]> = {
     'otcs_search_workspaces', 'otcs_get_workspace',
     'otcs_get_assignments', 'otcs_workflow_form', 'otcs_workflow_task',
     'otcs_members', 'otcs_permissions', 'otcs_categories',
+    'otcs_share',
   ],
   workflow: [
     // Core tools plus full workflow support
@@ -62,6 +63,7 @@ const TOOL_PROFILES: Record<string, string[]> = {
     'otcs_members', 'otcs_group_membership',
     'otcs_permissions', 'otcs_categories', 'otcs_workspace_metadata',
     'otcs_rm_classification', 'otcs_rm_holds', 'otcs_rm_xref', 'otcs_rm_rsi',
+    'otcs_share',
   ],
   rm: [
     // Core tools plus Records Management
@@ -717,6 +719,40 @@ const allTools: Tool[] = [
         // Pagination
         page: { type: 'number', description: 'Page number (for list/get_items)' },
         limit: { type: 'number', description: 'Results per page (for list/get_items)' },
+      },
+      required: ['action'],
+    },
+  },
+
+  // ==================== Sharing (1 tool) ====================
+  {
+    name: 'otcs_share',
+    description: 'Manage document sharing with external providers (e.g., Core Share). Actions: list (list all active shares), create (share items with invitees), stop (stop sharing an item), stop_batch (stop sharing multiple items).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'create', 'stop', 'stop_batch'], description: 'Action to perform' },
+        // For create action
+        node_ids: { type: 'array', items: { type: 'number' }, description: 'Node IDs to share (for create)' },
+        invitees: {
+          type: 'array',
+          description: 'Array of invitees with email and permissions (for create). Each invitee: { business_email: string, perm: 1|2|3|4 (1=Viewer, 2=Collaborator, 3=Manager, 4=Owner) }',
+          items: {
+            type: 'object',
+            properties: {
+              business_email: { type: 'string', description: 'Email address of the invitee' },
+              perm: { type: 'number', enum: [1, 2, 3, 4], description: '1=Viewer, 2=Collaborator, 3=Manager, 4=Owner' },
+              name: { type: 'string', description: 'Display name (optional)' },
+            },
+            required: ['business_email', 'perm'],
+          },
+        },
+        expire_date: { type: 'string', description: 'Expiration date yyyy-mm-dd (for create)' },
+        share_initiator_role: { type: 'number', enum: [1, 2, 3, 4], description: 'Initiator permission level: 1=Viewer, 2=Collaborator, 3=Manager, 4=Owner (for create)' },
+        sharing_message: { type: 'string', description: 'Message to include with share notification (for create)' },
+        coordinators: { type: 'array', items: { type: 'number' }, description: 'CS user IDs who can modify share config (for create)' },
+        // For stop action
+        node_id: { type: 'number', description: 'Node ID to stop sharing (for stop)' },
       },
       required: ['action'],
     },
@@ -1797,6 +1833,68 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
           if (!rsi_id) throw new Error('rsi_id required');
           const history = await client.getRMRSIApprovalHistory(rsi_id);
           return { rsi_id, history, count: history.length, message: `RSI ${rsi_id} has ${history.length} approval(s)` };
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+    }
+
+    // ==================== Sharing ====================
+    case 'otcs_share': {
+      const {
+        action, node_ids, node_id, invitees,
+        expire_date, share_initiator_role, sharing_message, coordinators
+      } = args as {
+        action: string;
+        node_ids?: number[];
+        node_id?: number;
+        invitees?: Array<{ business_email: string; perm: number; name?: string }>;
+        expire_date?: string;
+        share_initiator_role?: number;
+        sharing_message?: string;
+        coordinators?: number[];
+      };
+
+      switch (action) {
+        case 'list':
+          const listResult = await client.listShares();
+          return {
+            shares: listResult.shares,
+            total_count: listResult.total_count,
+            message: listResult.total_count === 0
+              ? 'No active shares found'
+              : `Found ${listResult.total_count} active share(s)`,
+          };
+        case 'create':
+          if (!node_ids || node_ids.length === 0) throw new Error('node_ids required');
+          const shareResult = await client.createShare({
+            node_ids,
+            invitees: invitees as any,
+            expire_date,
+            share_initiator_role: share_initiator_role as any,
+            sharing_message,
+            coordinators,
+          });
+          return {
+            success: shareResult.success,
+            node_ids: shareResult.node_ids,
+            partial: shareResult.partial,
+            message: shareResult.message || `Shared ${node_ids.length} item(s)`,
+          };
+        case 'stop':
+          if (!node_id) throw new Error('node_id required');
+          const stopResult = await client.stopShare(node_id);
+          return { success: stopResult.success, node_id, message: stopResult.message };
+        case 'stop_batch':
+          if (!node_ids || node_ids.length === 0) throw new Error('node_ids required');
+          const batchResult = await client.stopShareBatch(node_ids);
+          return {
+            success: batchResult.success,
+            count: batchResult.count,
+            failed: batchResult.failed,
+            message: batchResult.failed.length === 0
+              ? `Stopped sharing ${batchResult.count} item(s)`
+              : `Stopped sharing ${batchResult.count} item(s), ${batchResult.failed.length} failed`,
+          };
         default:
           throw new Error(`Unknown action: ${action}`);
       }

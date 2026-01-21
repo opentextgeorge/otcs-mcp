@@ -83,6 +83,12 @@ import {
   RMRSIUpdateParams,
   RMRSIScheduleCreateParams,
   RMRSIAssignParams,
+  // Sharing types
+  ShareCreateParams,
+  ShareInfo,
+  ShareOperationResponse,
+  SharedItem,
+  ShareListResponse,
 } from '../types.js';
 
 export class OTCSClient {
@@ -3585,5 +3591,174 @@ export class OTCSClient {
       approval_date: data.approval_date || data.approvalDate || data.ApprovalDate,
       approved_by: data.approved_by || data.approvedBy || data.ApprovedBy,
     };
+  }
+
+  // ============ Sharing ============
+
+  /**
+   * Share Content Server items with a share provider (e.g., CORE for Core Share)
+   * @param params Share parameters including node IDs, invitees, and options
+   * @returns Share result with success status and any messages
+   */
+  async createShare(params: ShareCreateParams): Promise<ShareInfo> {
+    // The web UI uses multipart/form-data for the shares endpoint
+    const formData = new FormData();
+
+    // Add node IDs - lowercase 'ids', JSON array
+    formData.append('ids', JSON.stringify(params.node_ids));
+
+    // Share provider (CORE for Core Share)
+    formData.append('shareProvider', params.share_provider || 'CORE');
+
+    // Share options as stringified JSON
+    const shareOptions: Record<string, unknown> = {};
+    if (params.expire_date) {
+      shareOptions.expire_date = params.expire_date;
+    }
+    if (params.share_initiator_role) {
+      shareOptions.shareInitiatorRole = params.share_initiator_role;
+    }
+    // Always include shareOptions even if minimal
+    formData.append('shareOptions', JSON.stringify(shareOptions));
+
+    // Provider-specific params (invitees, message) as stringified JSON
+    const providerParams: Record<string, unknown> = {};
+    if (params.invitees && params.invitees.length > 0) {
+      providerParams.invitees = params.invitees.map(invitee => ({
+        id: invitee.id || invitee.business_email,
+        business_email: invitee.business_email,
+        name: invitee.name || invitee.business_email.split('@')[0],
+        perm: String(invitee.perm),  // Must be string, not number
+        identityType: invitee.identityType || 1,
+        providerId: invitee.providerId || '',  // Include providerId if available
+      }));
+    }
+    if (params.sharing_message) {
+      providerParams.sharing_message = params.sharing_message;
+    }
+    formData.append('providerParams', JSON.stringify(providerParams));
+
+    // Coordinators - include current user if not specified
+    const coordinators = params.coordinators && params.coordinators.length > 0
+      ? params.coordinators
+      : [];
+    if (coordinators.length > 0) {
+      formData.append('coordinators', JSON.stringify(coordinators));
+    }
+
+    const response = await this.request<any>('POST', '/v2/shares', undefined, formData);
+
+    const result = response.results?.data || response.data || response;
+    const isPartial = result.partial === true;
+    const message = result.msg || (isPartial ? 'Share operation completed with partial success' : 'Share created successfully');
+
+    return {
+      node_ids: params.node_ids,
+      success: !isPartial,  // Only true success if not partial
+      partial: isPartial,
+      message: message,
+    };
+  }
+
+  /**
+   * Stop sharing an item (remove from share provider)
+   * @param nodeId The node ID to stop sharing
+   * @returns Operation result
+   */
+  async stopShare(nodeId: number): Promise<ShareOperationResponse> {
+    await this.request<any>('DELETE', `/v2/shares/${nodeId}`);
+    return {
+      success: true,
+      message: `Sharing stopped for node ${nodeId}`,
+    };
+  }
+
+  /**
+   * Stop sharing multiple items in batch
+   * @param nodeIds Array of node IDs to stop sharing
+   * @returns Operation result with count
+   */
+  async stopShareBatch(nodeIds: number[]): Promise<{ success: boolean; count: number; failed: number[] }> {
+    const failed: number[] = [];
+    let successCount = 0;
+
+    // Process in parallel batches
+    const maxConcurrency = 5;
+    for (let i = 0; i < nodeIds.length; i += maxConcurrency) {
+      const batch = nodeIds.slice(i, i + maxConcurrency);
+      const batchResults = await Promise.all(
+        batch.map(async (nodeId) => {
+          try {
+            await this.stopShare(nodeId);
+            return { success: true, nodeId };
+          } catch {
+            failed.push(nodeId);
+            return { success: false, nodeId };
+          }
+        })
+      );
+      successCount += batchResults.filter(r => r.success).length;
+    }
+
+    return {
+      success: failed.length === 0,
+      count: successCount,
+      failed,
+    };
+  }
+
+  /**
+   * List all shares for the current user
+   * @returns List of shared items
+   */
+  async listShares(): Promise<ShareListResponse> {
+    const response = await this.request<any>('GET', '/v2/shares');
+
+    // Parse the response - the format varies by CS version
+    const data = response.results?.data || response.data || response.results || response;
+
+    // Handle array of shared items
+    const items = Array.isArray(data) ? data : (data.shares || data.items || []);
+
+    const shares: SharedItem[] = items.map((item: any) => {
+      // Extract node info - it may be nested under different keys
+      const nodeData = item.data?.properties || item.properties || item.node || item;
+
+      return {
+        node_id: nodeData.id || nodeData.node_id || item.id,
+        name: nodeData.name || item.name || 'Unknown',
+        type: nodeData.type || item.type || 0,
+        type_name: nodeData.type_name || item.type_name || 'Unknown',
+        share_id: item.share_id || item.shareId || item.id?.toString(),
+        shared_date: item.shared_date || item.create_date || item.sharedDate,
+        expire_date: item.expire_date || item.expireDate,
+        share_provider: item.share_provider || item.provider || 'CORE',
+        invitees: item.invitees?.map((inv: any) => ({
+          email: inv.business_email || inv.email,
+          name: inv.name || inv.display_name,
+          permission: typeof inv.perm === 'string' ? parseInt(inv.perm) : (inv.perm || inv.permission),
+          permission_name: inv.perm_name || inv.permission_name || this.getPermissionName(inv.perm || inv.permission),
+        })),
+      };
+    });
+
+    return {
+      shares,
+      total_count: shares.length,
+    };
+  }
+
+  /**
+   * Helper to get permission name from permission level
+   */
+  private getPermissionName(perm: number | string): string {
+    const permNum = typeof perm === 'string' ? parseInt(perm) : perm;
+    switch (permNum) {
+      case 1: return 'Viewer';
+      case 2: return 'Collaborator';
+      case 3: return 'Manager';
+      case 4: return 'Owner';
+      default: return 'Unknown';
+    }
   }
 }
